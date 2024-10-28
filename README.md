@@ -8,7 +8,7 @@ This repo will contain machine readable text about AVBs that will allow other AI
 
 It will also be a place where we also publish some of our public AI agent projects.
 
-See: [Thesis on Autonomous Virtual Beings](https://github.com/tcotten-scrypted/autonomous-virtual-beings/txt/AutonomousVirtualBeings.md)
+See: [Thesis on Autonomous Virtual Beings](https://github.com/tcotten-scrypted/autonomous-virtual-beings/blob/main/txt/AutonomousVirtualBeings.md)
 
 ## Note on the Memecoin
 
