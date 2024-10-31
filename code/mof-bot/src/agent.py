@@ -3,6 +3,7 @@ import signal
 import sys
 
 import splash
+import fools_content
 
 TICK = 1000 # 1000ms = 1 second
 
@@ -10,6 +11,9 @@ TICK = 1000 # 1000ms = 1 second
 splash.display()
 
 ### CONFIG
+
+### CONTENT
+fools_content.load_available_content()
 
 ### START
 
