@@ -1,5 +1,4 @@
 import os
-import openai
 from openai import OpenAI
 
 from typing import List, Dict
@@ -47,7 +46,7 @@ def validate_api():
 
 def try_mixture(posts, effects):
     validate_api()
-    
+
     prompt = f"""
 Take the following two examples of writing from two different AI Chatbots and blend them into a synthesis. You will use a list of chosen effects to exaggerate your responses with a certain emotion, tone, and length.
 
@@ -71,25 +70,23 @@ OBJECTIVES:
         prompt += "\n* You may add emojis"
 
     print(f"DEBUGGING PROMPT: {prompt}")
-   
+
     llm_model = os.getenv("LLM_MODEL")
     content = prompt
 
-    completion = openai.ChatCompletion.create(
-        model=llm_model,
-        temperature=1,
-        top_p=1,
-        frequency_penalty=0,
-        presence_penalty=0,
-        messages=[
-            {
-                "role": "system",
-                "content": "The following is a conversation with an AI assistant tasked with crafting tweets according to various requested levels of humor, vulgarity, and shock,"
-            },
-            {"role": "user", "content": content},
-        ],
-    )
+    completion = client.chat.completions.create(model=llm_model,
+    temperature=1,
+    top_p=1,
+    frequency_penalty=0,
+    presence_penalty=0,
+    messages=[
+        {
+            "role": "system",
+            "content": "The following is a conversation with an AI assistant tasked with crafting tweets according to various requested levels of humor, vulgarity, and shock,"
+        },
+        {"role": "user", "content": content},
+    ])
 
     response = completion.choices[0].message.content
-    
+
     return response

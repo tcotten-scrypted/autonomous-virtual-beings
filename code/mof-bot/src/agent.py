@@ -68,7 +68,7 @@ def execute(time_start, job_queue, results_queue):
     ### TESTING STUB: execute LLM attempt using OpenAI GPT-4o
     tweet = try_mixture(posts, effects)
     
-    print("I want to tweet:\n\n\t{tweet}\n")
+    print(f"I want to tweet:\n\n\t{tweet}\n")
 
 def tick():
     """
