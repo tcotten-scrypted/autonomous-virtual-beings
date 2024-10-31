@@ -1,12 +1,17 @@
+import os
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 from rich.style import Style
 
+# Default logo path
+default_logo_path = os.path.join(os.path.dirname(__file__), "mof_logo.txt")
+
 # Initialize a console object from rich
 console = Console()
 
-def load_logo(file_path="mof_logo.txt"):
+def load_logo(file_path=default_logo_path):
     """Load ASCII logo from a text file."""
     try:
         with open(file_path, "r") as file:
