@@ -1,0 +1,88 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environment
+venv/
+ENV/
+env/
+
+# Package files
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Data files
+data/
+*.sqlite3
+
+# Logs and debug output
+*.log
+logs/
+
+# Config files with sensitive information
+.env
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# System files (macOS)
+.DS_Store
+
+# System files (Windows)
+Thumbs.db
+Desktop.ini
+
+# VSCode settings
+.vscode/
+
+# PyCharm settings
+.idea/
+
+# Test coverage and reports
+.coverage
+htmlcov/
+*.cover
+*.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.coveragerc
+
+# pytest
+.pytest_cache/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# PyInstaller
+#  Usually these files are written to by PyInstaller for tracking files in the build directory
+#  and the cache directory
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+*.cover
+*.coverage
+.cache
+
+# Temporary files and directories
+*.bak
+*.swp
+*.tmp
+*~
+
+# Python environment metadata
+Pipfile
+Pipfile.lock
+
+# AWS configuration files (if relevant for deployment)
+.aws/
