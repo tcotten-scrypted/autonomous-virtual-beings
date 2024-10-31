@@ -1,2 +1,5 @@
+python-dotenv
+numpy
 rich
+openai
 pytest
