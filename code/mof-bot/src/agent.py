@@ -2,7 +2,16 @@ import time
 import signal
 import sys
 
+import splash
+
 TICK = 1000 # 1000ms = 1 second
+
+### SPLASH
+splash.display()
+
+### CONFIG
+
+### START
 
 running = True
 
