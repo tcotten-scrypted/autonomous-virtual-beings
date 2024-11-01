@@ -41,7 +41,7 @@ def pick_effects():
     emojis = np.random.choice([True, False], p=[0.1, 0.9])
     emotion = np.random.choice(emotions)
     tone = np.random.choice(tones)
-    length = int(np.clip(np.random.normal(80, 40), 10, 200))  # Normal dist with mean 80, clipped between 10 and 200
+    length = int(np.clip(np.random.normal(120, 40), 10, 300))  # Normal dist with mean 80, clipped between 10 and 1000
     scramble = np.random.choice([True, False], p=[0.01, 0.99])
     mistakes = np.random.choice([True, False], p=[1/3, 2/3])
     thirdperson = np.random.choice([True, False], p=[0.01, 0.99])
