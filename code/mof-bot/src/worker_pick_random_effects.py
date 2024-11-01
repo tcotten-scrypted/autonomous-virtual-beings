@@ -4,7 +4,7 @@ import numpy as np
 from enum import Enum
 
 class Effect:
-    def __init__(self, emojis, emotion, tone, length, scramble, mistakes, thirdperson):
+    def __init__(self, emojis, emotion, tone, length, scramble, mistakes, thirdperson, sickjoke, freeukraine):
         """
         Initializes an Effect with the specified properties.
         
@@ -21,6 +21,8 @@ class Effect:
         self.scramble = scramble
         self.mistakes = mistakes
         self.thirdperson = thirdperson
+        self.sickjoke = sickjoke
+        self.freeukraine = freeukraine
 
     def __repr__(self):
         return (f"Effect(emojis={self.emojis}, emotion='{self.emotion}', "
@@ -45,6 +47,8 @@ def pick_effects():
     scramble = np.random.choice([True, False], p=[0.01, 0.99])
     mistakes = np.random.choice([True, False], p=[1/3, 2/3])
     thirdperson = np.random.choice([True, False], p=[0.01, 0.99])
+    sickjoke = np.random.choice([True, False], p=[0.01, 0.99])
+    freeukraine = np.random.choice([True, False], p=[0.001, 0.999])
 
     # Create and return an Effect object
-    return Effect(emojis=emojis, emotion=emotion, tone=tone, length=length, scramble=scramble, mistakes=mistakes, thirdperson=thirdperson)
+    return Effect(emojis=emojis, emotion=emotion, tone=tone, length=length, scramble=scramble, mistakes=mistakes, thirdperson=thirdperson, sickjoke=sickjoke, freeukraine=freeukraine)

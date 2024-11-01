@@ -4,7 +4,7 @@ import sys
 import threading
 import queue
 
-import dbh
+import setup
 import splash
 import result
 import fools_content

@@ -9,8 +9,7 @@ from dotenv import load_dotenv
 # Define paths for setup
 DB_PATH = Path(__file__).parent / "db/bin/database.sqlite"
 ENV_PATH = Path(__file__).parent / ".env"
-BIN_DIR = Path(__file__).parent / "db/bin"
-MIGRATIONS_DIR = Path(__file__).parent / "db/migrations"
+DB_BIN_DIR = Path(__file__).parent / "db/bin"
 
 def setup_database():
     """Initializes the database if it doesn't exist."""
@@ -28,8 +27,7 @@ def setup_env():
 
 def setup_directories():
     """Ensures necessary directories exist."""
-    BIN_DIR.mkdir(parents=True, exist_ok=True)
-    MIGRATIONS_DIR.mkdir(parents=True, exist_ok=True)
+    DB_BIN_DIR.mkdir(parents=True, exist_ok=True)
     print("Required directories created.")
 
 def setup_all():
@@ -72,11 +70,11 @@ def clean_all():
         print("Removed .env file.")
 
     # Optionally remove directories if empty
-    if BIN_DIR.exists() and not any(BIN_DIR.iterdir()):
-        BIN_DIR.rmdir()
+    if DB_BIN_DIR.exists() and not any(DB_BIN_DIR.iterdir()):
+        DB_BIN_DIR.rmdir()
         print("Removed empty bin directory.")
-    if MIGRATIONS_DIR.exists() and not any(MIGRATIONS_DIR.iterdir()):
-        MIGRATIONS_DIR.rmdir()
+    if DB_MIGRATIONS_DIR.exists() and not any(DB_MIGRATIONS_DIR.iterdir()):
+        DB_MIGRATIONS_DIR.rmdir()
         print("Removed empty migrations directory.")
 
     print("Cleaned up project setup files.")

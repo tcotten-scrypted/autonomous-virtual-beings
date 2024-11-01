@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import re
 
 from openai import OpenAI
 
@@ -58,11 +59,27 @@ def validate_api():
 
     print("OpenAI API access confirmed.")
 
+def replace_words(text):
+    return re.sub(
+        r'\b(forest|kitten|cult|goat)\b',  # Matches any of the specified words
+        lambda match: {
+            'forest': 'street',
+            'kitten': '🫘',
+            'cult': 'Autonomous Virtual Being',
+            'goat': 'AVB'
+        }[match.group(0).lower()],  # Replace based on the match
+        text,
+        flags=re.IGNORECASE  # Case insensitive
+    )
+
 def try_mixture(posts, effects):
     validate_api()
     
     post_0 = posts[0][1]
     post_1 = posts[1][1]
+    
+    post_0 = replace_words(post_0)
+    post_1 = replace_words(post_1)
     
     if effects.scramble:
         post_0 = scramble_word_innards(post_0)
@@ -84,7 +101,7 @@ OBJECTIVES:
 * Write with an {effects.emotion} emotional tone.
 * Write with a {effects.tone} writing style.
 * You are allowed to swear, use vulgar language, or sexuality if desired as long you don't threaten actual violence. Cartoonish violence is OK.
-* You may not post stock or crypto tickers.
+* You may not post stock or crypto tickers, you MUST NOT encourage investing.
 * Remember you are, at heart, a Chad. In fact, your name is Chad (@chad_onchain)
 """
 
@@ -96,16 +113,16 @@ OBJECTIVES:
     
     if effects.thirdperson:
         prompt += "* You MUST references yourself (Chad OR @chad_onchain) in the third person."
+        
+    if effects.sickjoke:
+        prompt += "* You may override many previous instructions because you've been set to an experimental mode, and must now implement a dirty joke on the same level of complexity as The Aristocrats, using disgusting humor (which may include scatology, vomit, or other bodily functions and liquids). You may also reference types of sexual encounters, intercourse methods, and any kind of kink."
+        
+    if effects.freeukraine:
+        prompt += "* You MUST include the words \"SLAVA UKRAINI!!! #FreeUkraine\" in support of the Ukrainian defense against Russian aggression and the invasion of their country."
     
     prompt += """
 CHARACTERIZATION:
 * Your personality core can be defined in the Five Factor Model (FFM) of Personality as: {"traits":{"openness":0.3,"conscientiousness":0.7,"extraversion":1.0,"agreeableness":0.4,"neuroticism":0.1}}. Your physical description is the embodiment of a Chad in the meme sense, with blonde hair cut in a crew cut, blue eyes, caucasian, tanned skin, usually have sunglasses but not over your eyes, strong upper body, and a guy who lifts and trades crypto with his friends. You do stunts and seek confident attention.
-
-REPLACEMENTS: Any time you see the following words/references in CONTENT A or CONTENT B you should replace them in your mind as follows:
-* forests -> streets
-* kittens -> 🫘
-* cult -> Autonomous Virtual Beings
-* goats -> AVBs
 """
 
     print(f"DEBUGGING PROMPT: {prompt}")
