@@ -1,3 +1,4 @@
+import os
 import time
 import signal
 import sys
@@ -20,6 +21,20 @@ from worker_mixture_of_fools_llm import try_mixture
 
 TICK = 1000  # 1000ms = 1 second
 
+LOG_DIR = os.path.join(os.path.dirname(__file__), "../log/")
+LOG_FILE = os.path.join(LOG_DIR, "agent.log")
+
+# Ensure log directory exists
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
+
+# Function to log events to a file
+def log_event(message):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(LOG_FILE, "a") as log_file:
+        log_file.write(f"[{timestamp}] {message}\n")
+    print(f"[LOG] {message}")  # Print to console for immediate feedback
+
 # Splash display
 splash.display()
 
@@ -36,6 +51,7 @@ scheduler_list = []
 def signal_handler(sig, frame):
     global running
     running = False
+    log_event("Interrupt received, shutting down gracefully...")
     print("\nInterrupt received, shutting down gracefully...")
 
 signal.signal(signal.SIGINT, signal_handler)
@@ -54,6 +70,7 @@ class ScheduledEvent:
         else:
             self.backoff_time *= 2  # Double the backoff time
         self.event_time += timedelta(minutes=self.backoff_time)
+        log_event(f"Rescheduled with backoff: {self.backoff_time} minute(s)")
         print(f"Rescheduled with backoff: {self.backoff_time} minute(s)")
 
 def has_time_remaining(time_start):
@@ -68,6 +85,7 @@ def execute(time_start, job_queue, results_queue):
         if not event.completed:
             # Immediately create content if it's not already created
             if not event.content:
+                log_event("Generating content for scheduled tweet.")
                 print("Generating content for scheduled tweet.")
                 event.content = create_tweet_content()
 
@@ -75,10 +93,12 @@ def execute(time_start, job_queue, results_queue):
             if event.event_time <= now and event.content:
                 try:
                     send_tweet("fool_handle", event.content)
+                    log_event(f"Tweet sent successfully: {event.content}")
                     print(f"Tweet sent successfully at {now}.")
                     event.completed = True
                     event.backoff_time = 0  # Reset backoff after successful send
                 except Exception as e:
+                    log_event(f"Error while sending tweet: {e}")
                     print(f"Error while sending tweet: {e}")
                     event.apply_backoff()
 
@@ -90,7 +110,8 @@ def prepare_tweet_for_scheduling():
     delay_minutes = int(np.random.normal(loc=25, scale=10))
     delay_minutes = max(5, min(45, delay_minutes))
 
-    event_time = datetime.now() + timedelta(seconds=10) #timedelta(minutes=delay_minutes)
+    event_time = datetime.now() + timedelta(seconds=10)  # timedelta(minutes=delay_minutes)
+    log_event(f"Scheduled a new tweet event at {event_time}.")
     print(f"Scheduled a new tweet event at {event_time}.")
     scheduler_list.append(ScheduledEvent(event_time, "Scheduled tweet post"))
 
@@ -99,14 +120,17 @@ def create_tweet_content():
         lore = pick_lore()
         posts = pick_two_posts(fools_content)
         effects = pick_effects()
-        tweet = try_mixture(posts, lore, effects)
+        tweet = try_mixture(posts, lore, effects, log_event)
+        log_event(f"Prepared tweet content: {tweet}")
         print(f"Prepared tweet content:\n\n\t{tweet}\n")
         return tweet
     except Exception as e:
+        log_event(f"Error while preparing tweet content: {e}")
         print(f"Error while preparing tweet content: {e}")
         return None
 
 def send_tweet(handle, tweet):
+    log_event(f"Sending tweet for @{handle}: {tweet}")
     print(f"Sending tweet for @{handle}: {tweet}")
     # Replace this with actual API call logic
 
@@ -131,6 +155,8 @@ def tick():
             time.sleep(time_sleep)
 
 if __name__ == "__main__":
+    log_event("Starting agent...")
     print("Starting agent...")
     tick()
+    log_event("Agent stopped.")
     print("Agent stopped.")

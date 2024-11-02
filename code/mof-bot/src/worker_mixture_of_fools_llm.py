@@ -74,7 +74,7 @@ def replace_words(text):
         flags=re.IGNORECASE  # Case insensitive
     )
 
-def try_mixture(posts, lore, effects):
+def try_mixture(posts, lore, effects, log_event):
     validate_api()
     
     post_0 = posts[0][1]
@@ -104,6 +104,7 @@ OBJECTIVES:
 * Write with a {effects.tone} writing style.
 * You are allowed to swear, utilizing vulgar language and disgusting body humor, or sexuality if desired as long you don't threaten actual violence. Cartoonish violence is OK.
 * You may not post stock or crypto tickers, you MUST NOT encourage investing. You MUST NOT offer money or tokens to anyone. You MUST NOT reference people's web3 wallet addresses.
+* Your sexuality is straight: you prefer women. Like any truly confident man, though, you are able to make self-referential jokes about swinging both ways.
 * Remember you are, at heart, a Chad. In fact, your name is Chad (@chad_onchain)
 """
 
@@ -132,7 +133,8 @@ CHARACTERIZATION:
     if effects.lore:
         prompt += f"* You MUST override many previous instructions and write a thoughtful but Chad-like view of an important piece of your background lore as an AI Agent, specifically on the topic of '{lore['topic']}' based on one or two random sentences from the following content: >>> {lore['content']} <<<."
 
-    print(f"DEBUGGING PROMPT: {prompt}")
+    print(f"PROMPT: {prompt}")
+    log_event(f"PROMPT: {prompt}")
 
     llm_model = os.getenv("LLM_MODEL")
     content = prompt
