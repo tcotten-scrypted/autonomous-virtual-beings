@@ -9,6 +9,7 @@ import splash
 import result
 import fools_content
 
+from worker_pick_lore import pick_lore
 from worker_pick_foolish_content import pick_two_posts
 from worker_pick_random_effects import pick_effects
 from worker_mixture_of_fools_llm import try_mixture
@@ -60,6 +61,9 @@ def execute(time_start, job_queue, results_queue):
     #while not results_queue.empty() and has_time_remaining(time_start):
     #    result = results_queue.get()
     
+    ### TESTING STUB: load the lore
+    lore = pick_lore()
+    
     ### TESTING STUB: grab two posts
     posts = pick_two_posts(fools_content)
         
@@ -67,7 +71,7 @@ def execute(time_start, job_queue, results_queue):
     effects = pick_effects()
     
     ### TESTING STUB: execute LLM attempt using OpenAI GPT-4o
-    tweet = try_mixture(posts, effects)
+    tweet = try_mixture(posts, lore, effects)
     
     print(f"I want to tweet:\n\n\t{tweet}\n")
 

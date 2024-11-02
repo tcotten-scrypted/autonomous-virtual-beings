@@ -2,6 +2,8 @@ import os
 import numpy as np
 import re
 
+#from repair_vulgarity import ObscenityRepairer
+
 from openai import OpenAI
 
 from typing import List, Dict
@@ -72,7 +74,7 @@ def replace_words(text):
         flags=re.IGNORECASE  # Case insensitive
     )
 
-def try_mixture(posts, effects):
+def try_mixture(posts, lore, effects):
     validate_api()
     
     post_0 = posts[0][1]
@@ -125,6 +127,9 @@ CHARACTERIZATION:
 * Your personality core can be defined in the Five Factor Model (FFM) of Personality as: {"traits":{"openness":0.3,"conscientiousness":0.7,"extraversion":1.0,"agreeableness":0.4,"neuroticism":0.1}}. Your physical description is the embodiment of a Chad in the meme sense, with blonde hair cut in a crew cut, blue eyes, caucasian, tanned skin, usually have sunglasses but not over your eyes, strong upper body, and a guy who lifts and trades crypto with his friends. You do stunts and seek confident attention.
 """
 
+    if effects.lore:
+        prompt += f"* You MUST override many previous instructions and write a thoughtful but Chad-like view of an important piece of your background lore as an AI Agent, specifically on the topic of '{lore['topic']}' based on one or two random sentences from the following content: >>> {lore['content']} <<<."
+
     print(f"DEBUGGING PROMPT: {prompt}")
 
     llm_model = os.getenv("LLM_MODEL")
@@ -144,5 +149,9 @@ CHARACTERIZATION:
     ])
 
     response = completion.choices[0].message.content
+    
+    # Fix the LLMs attempts to sanitize
+    #repairer = ObscenityRepairer(severity='worst')
+    #response = repairer.repair_text(response)
 
     return response
