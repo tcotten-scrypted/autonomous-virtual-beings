@@ -1,7 +1,6 @@
 import time
 import signal
 import sys
-import threading
 import queue
 import numpy as np
 from datetime import datetime, timedelta
@@ -42,11 +41,11 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 class ScheduledEvent:
-    def __init__(self, event_time, action, description="", backoff_time=0):
+    def __init__(self, event_time, description="", backoff_time=0):
         self.event_time = event_time
-        self.action = action
         self.description = description
         self.completed = False
+        self.content = None  # Holds content if generated
         self.backoff_time = backoff_time  # Initial backoff time in minutes
 
     def apply_backoff(self):
@@ -64,75 +63,63 @@ def has_time_remaining(time_start):
 def execute(time_start, job_queue, results_queue):
     now = datetime.now()
 
-    # Check if there is a scheduled post event and if it's time to execute it
+    # Iterate over scheduled events
     for event in scheduler_list:
-        if not event.completed and event.event_time <= now:
-            try:
-                # Attempt to send a tweet if content is prepared
-                tweet = event.action()
-                if tweet:
-                    send_tweet("fool_handle", tweet)
+        if not event.completed:
+            # Immediately create content if it's not already created
+            if not event.content:
+                print("Generating content for scheduled tweet.")
+                event.content = create_tweet_content()
+
+            # Check if the timestamp has been reached and send the tweet if content is ready
+            if event.event_time <= now and event.content:
+                try:
+                    send_tweet("fool_handle", event.content)
                     print(f"Tweet sent successfully at {now}.")
                     event.completed = True
-                    event.backoff_time = 0  # Reset backoff on successful send
-                else:
-                    print("No tweet content found, preparing new content.")
-                    prepare_tweet_for_scheduling()
-            except Exception as e:
-                print(f"Error while sending tweet: {e}")
-                event.apply_backoff()
-    
-    # If no scheduled tweet, prepare a new tweet and schedule it
+                    event.backoff_time = 0  # Reset backoff after successful send
+                except Exception as e:
+                    print(f"Error while sending tweet: {e}")
+                    event.apply_backoff()
+
+    # If no active events, schedule a new one
     if not any(event for event in scheduler_list if not event.completed):
         prepare_tweet_for_scheduling()
 
 def prepare_tweet_for_scheduling():
-    """
-    Prepares a tweet and schedules it for posting.
-    """
-    # Schedule a new tweet event using a normal distribution
-    delay_minutes = int(np.random.normal(loc=25, scale=10))  # Centered at 25 mins, standard deviation of 10
-    delay_minutes = max(5, min(45, delay_minutes))  # Clamping between 5 and 45 mins
+    delay_minutes = int(np.random.normal(loc=25, scale=10))
+    delay_minutes = max(5, min(45, delay_minutes))
 
     event_time = datetime.now() + timedelta(seconds=10) #timedelta(minutes=delay_minutes)
     print(f"Scheduled a new tweet event at {event_time}.")
+    scheduler_list.append(ScheduledEvent(event_time, "Scheduled tweet post"))
 
-    def create_tweet_content():
-        """
-        Generates and returns the tweet content.
-        """
-        try:
-            lore = pick_lore()
-            posts = pick_two_posts(fools_content)
-            effects = pick_effects()
-            tweet = try_mixture(posts, lore, effects)
-            print(f"Prepared tweet content:\n\n\t{tweet}\n")
-            return tweet
-        except Exception as e:
-            print(f"Error while preparing tweet content: {e}")
-            return None
-
-    # Initialize the event with no backoff initially
-    scheduler_list.append(ScheduledEvent(event_time, create_tweet_content, "Scheduled tweet post"))
+def create_tweet_content():
+    try:
+        lore = pick_lore()
+        posts = pick_two_posts(fools_content)
+        effects = pick_effects()
+        tweet = try_mixture(posts, lore, effects)
+        print(f"Prepared tweet content:\n\n\t{tweet}\n")
+        return tweet
+    except Exception as e:
+        print(f"Error while preparing tweet content: {e}")
+        return None
 
 def send_tweet(handle, tweet):
-    """
-    Stub function to simulate sending a tweet. Replace with actual implementation.
-    """
     print(f"Sending tweet for @{handle}: {tweet}")
     # Replace this with actual API call logic
 
 def tick():
     job_queue = queue.Queue()
     results_queue = queue.Queue()
-    
     console = Console()
-        
+    
     with Live(console=console, refresh_per_second=4) as live:
         while running:
             time_start = time.time()
             
-            # Update the spinner and current epoch time
+            # Display the spinner and current epoch time
             current_epoch = int(time.time())
             spinner = Spinner("dots", f" Tick | Epoch Time: {current_epoch}")
             live.update(spinner)
