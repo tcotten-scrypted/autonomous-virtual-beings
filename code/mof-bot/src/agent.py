@@ -92,7 +92,7 @@ def execute(time_start, job_queue, results_queue):
             # Check if the timestamp has been reached and send the tweet if content is ready
             if event.event_time <= now and event.content:
                 try:
-                    send_tweet("fool_handle", event.content)
+                    send_tweet("chad_onchain", event.content)
                     log_event(f"Tweet sent successfully: {event.content}")
                     print(f"Tweet sent successfully at {now}.")
                     event.completed = True
