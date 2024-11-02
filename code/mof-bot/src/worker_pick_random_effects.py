@@ -43,7 +43,7 @@ def pick_effects():
     tones = ["jock", "bro", "alpha", "motivational guru", "gym rat", "cryptobro", "macho", "influencer", "beastmode", "minimalist"]
 
     # Generate each effect attribute randomly
-    emojis = np.random.choice([True, False], p=[0.1, 0.9])
+    emojis = np.random.choice([True, False], p=[0.05, 0.95])
     emotion = np.random.choice(emotions)
     tone = np.random.choice(tones)
     length = int(np.clip(np.random.normal(120, 40), 10, 300))
@@ -55,7 +55,7 @@ def pick_effects():
     freeukraine = np.random.choice([True, False], p=[0.001, 0.999])
     
     if lore:
-        length *= 3
+        length *= 4
 
     # Create and return an Effect object
     return Effect(emojis=emojis, emotion=emotion, tone=tone, length=length, lore=lore, scramble=scramble, mistakes=mistakes, thirdperson=thirdperson, sickjoke=sickjoke, freeukraine=freeukraine)
