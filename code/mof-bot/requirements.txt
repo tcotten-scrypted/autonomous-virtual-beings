@@ -1,4 +1,5 @@
 python-dotenv
+tweepy
 numpy
 rich
 openai
