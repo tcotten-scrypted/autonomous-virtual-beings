@@ -20,7 +20,7 @@ def initialize_twitter_client(bearer_token):
     return client
 
 def extract_content_from_fool(handle, max_tweets=1000):
-    """Extract tweet text content from the specified handle's timeline and save it as a JSON file."""
+    """Extract full tweet text content from the specified handle's timeline and save it as a JSON file."""
     bearer_token = load_env_variables()
     client = initialize_twitter_client(bearer_token)
     
@@ -38,12 +38,13 @@ def extract_content_from_fool(handle, max_tweets=1000):
                 response = client.get_users_tweets(
                     user_id,
                     max_results=100,
-                    tweet_fields=['text'],
-                    pagination_token=pagination_token
+                    tweet_fields=['text', 'entities', 'public_metrics'],
+                    expansions=['referenced_tweets.id']
                 )
                 
                 if response.data:
-                    tweet_texts.extend([tweet.text for tweet in response.data])
+                    for tweet in response.data:
+                        tweet_texts.append(tweet.text)
                 else:
                     break  # No more tweets available
 
