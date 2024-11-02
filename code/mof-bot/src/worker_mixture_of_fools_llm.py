@@ -63,12 +63,14 @@ def validate_api():
 
 def replace_words(text):
     return re.sub(
-        r'\b(forest|kitten|cult|goat)\b',  # Matches any of the specified words
+        r'\b(forests?|kittens?|cults?|goats?)\b',  # Matches singular/plural variations (e.g., kitten, kittens)
         lambda match: {
             'forest': 'street',
             'kitten': '🫘',
+            'kittens': '🫘', 
             'cult': 'Autonomous Virtual Being',
-            'goat': 'AVB'
+            'goat': 'AVB',
+            'trees': 'dank shards'
         }[match.group(0).lower()],  # Replace based on the match
         text,
         flags=re.IGNORECASE  # Case insensitive
