@@ -21,6 +21,11 @@ from worker_pick_random_effects import pick_effects
 from worker_mixture_of_fools_llm import try_mixture
 from worker_send_tweet import send_tweet
 
+from dotenv import load_dotenv
+
+load_dotenv()
+DEBUGGING=os.getenv("DEBUGGING")
+
 TICK = 1000  # 1000ms = 1 second
 
 LOG_DIR = os.path.join(os.path.dirname(__file__), "../log/")
@@ -99,7 +104,9 @@ def execute(time_start, job_queue, results_queue):
             # Check if the timestamp has been reached and send the tweet if content is ready
             if event.event_time <= now and event.content:
                 try:
-                    send_tweet(event.content, log_event)
+                    if not DEBUGGING:
+                        send_tweet(event.content, log_event)
+                        
                     log_event(f"Tweet sent successfully: {event.content}")
                     print(f"Tweet sent successfully at {now}.")
                     event.completed = True
@@ -125,6 +132,9 @@ def execute(time_start, job_queue, results_queue):
 def prepare_tweet_for_scheduling():
     delay_minutes = int(np.random.normal(loc=25, scale=10))
     delay_minutes = max(5, min(80, delay_minutes))
+    
+    if DEBUGGING:
+        delay_minutes = 1
 
     event_time = datetime.now() + timedelta(minutes=delay_minutes)
     log_event(f"Scheduled a new tweet event at {event_time}.")
