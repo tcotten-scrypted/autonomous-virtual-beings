@@ -30,7 +30,7 @@ def load_available_content():
     """
     global available_content
     try:
-        with open(data_file_path, "r") as file:
+        with open(data_file_path, "r", encoding='utf-8') as file:
             available_content = json.load(file)
             summarize()
     except FileNotFoundError:

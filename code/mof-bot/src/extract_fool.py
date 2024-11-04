@@ -38,6 +38,7 @@ def extract_content_from_fool(handle, max_tweets=1000):
                 response = client.get_users_tweets(
                     user_id,
                     max_results=100,
+                    pagination_token=pagination_token,  # Pass the pagination token
                     tweet_fields=['text', 'entities', 'public_metrics'],
                     expansions=['referenced_tweets.id']
                 )
@@ -55,7 +56,7 @@ def extract_content_from_fool(handle, max_tweets=1000):
                 # Update the pagination token for the next request
                 pagination_token = response.meta.get('next_token')
                 if not pagination_token:
-                    break  # No more pages
+                    break  # No more pages available
 
             except tweepy.errors.TooManyRequests as e:
                 print("Rate limit hit. Sleeping for 15 minutes...")

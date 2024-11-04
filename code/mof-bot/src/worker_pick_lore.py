@@ -9,7 +9,7 @@ def load_lore_data(filepath=DATA_FILE):
     Loads lore data from a specified JSON file.
     Returns the data as a dictionary.
     """
-    with open(filepath, 'r') as file:
+    with open(filepath, 'r', encoding='utf-8') as file:
         lore_data = json.load(file)
     return lore_data
 
