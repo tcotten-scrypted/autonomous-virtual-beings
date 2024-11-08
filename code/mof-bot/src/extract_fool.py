@@ -38,9 +38,8 @@ def extract_content_from_fool(handle, max_tweets=1000):
                 response = client.get_users_tweets(
                     user_id,
                     max_results=100,
-                    pagination_token=pagination_token,  # Pass the pagination token
-                    tweet_fields=['text', 'entities', 'public_metrics'],
-                    expansions=['referenced_tweets.id']
+                    pagination_token=pagination_token,
+                    tweet_fields=['text', 'entities', 'public_metrics', 'created_at']
                 )
                 
                 if response.data:
