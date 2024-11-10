@@ -219,8 +219,6 @@ def tick():
             time_sleep = max(0, TICK - time_elapsed) / 1000
             time.sleep(time_sleep)
 
-exit()
-
 if __name__ == "__main__":
     log_event("Starting agent...")
     print("Starting agent...")
