@@ -1,1 +1,5 @@
 .env
+
+# utility gists
+prep_gpt.py
+chatgpt_context.txt

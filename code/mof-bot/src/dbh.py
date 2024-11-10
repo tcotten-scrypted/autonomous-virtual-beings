@@ -2,6 +2,8 @@ import os
 import sqlite3
 from pathlib import Path
 from threading import Lock
+from rich.console import Console
+from rich.table import Table
 
 class DBH:
     """
@@ -32,6 +34,8 @@ class DBH:
         Checks if the database exists; if not, creates it and applies migrations.
     _run_migrations():
         Applies SQL migrations in the order they appear in the migrations directory.
+    _display_table_info():
+        Displays high-level table info if the database was just created.
     """
 
     _instance = None
@@ -83,15 +87,22 @@ class DBH:
         """
         Initializes the database by checking if it exists. If it does not exist,
         creates the database file, applies initial migrations, and establishes a connection.
+        Displays table info if the database was just created.
         """
+        db_created = False
         if not os.path.exists(self.db_path):
             print("Database does not exist. Initializing...")
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             self._connection = sqlite3.connect(self.db_path)
+            db_created = True
             self._run_migrations()
         else:
             self._connection = sqlite3.connect(self.db_path)
             print("Database already initialized.")
+
+        # If the database was just created, display high-level table info
+        if db_created:
+            self._display_table_info()
 
     def _run_migrations(self):
         """
@@ -110,3 +121,28 @@ class DBH:
                 print(f"Applied migration: {filename}")
 
         self._connection.commit()
+
+    def _display_table_info(self):
+        """
+        Displays the names and record counts of high-level tables if the database was just created.
+        Uses the `rich` library to format the output as a table.
+        """
+        console = Console()
+        table = Table(title="Database Table Summary")
+
+        table.add_column("Table Name", style="cyan", no_wrap=True)
+        table.add_column("Record Count", style="magenta")
+
+        cursor = self._connection.cursor()
+
+        # Retrieve all table names
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = cursor.fetchall()
+
+        # Query the row count for each table
+        for (table_name,) in tables:
+            cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+            count = cursor.fetchone()[0]
+            table.add_row(table_name, str(count))
+
+        console.print(table)
