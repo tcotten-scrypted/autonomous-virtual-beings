@@ -1,6 +1,6 @@
 # loyalty.py
 
-from avbcore import AVBCore
+from cores.avbcore import AVBCore
 
 class LoyaltyCore(AVBCore):
     """

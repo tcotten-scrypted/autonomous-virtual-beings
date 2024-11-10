@@ -62,6 +62,8 @@ class AVBCoreManager:
         - AVBCoreRegistryFileError if the registry file is missing or invalid.
         - AVBCoreLoadingError if a core cannot be imported or initialized.
         """
+        base_dir = Path(__file__).parent.resolve()
+        
         # Check if the registry file exists
         if not self.registry_path.exists():
             raise AVBCoreRegistryFileError(f"Registry file not found at {self.registry_path}")
@@ -76,17 +78,22 @@ class AVBCoreManager:
                 if not all(key in core_def for key in ("file", "class", "name", "priority")):
                     raise AVBCoreRegistryFileError("Missing required key in core definition: 'file', 'class', 'name', or 'priority'.")
 
-                file_name = core_def["file"].replace(".py", "")
+                file_name = core_def["file"]
                 class_name = core_def["class"]
                 name = core_def["name"]
                 priority = core_def["priority"]
+                
+                core_path = base_dir / file_name
+                if not core_path.exists():
+                    raise AVBCoreLoadingError(f"Core file '{core_path}' not found.")
 
-                # Dynamically import the core module and class
                 try:
-                    module = importlib.import_module(file_name)
+                    spec = importlib.util.spec_from_file_location(class_name, core_path)
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
                     core_class = getattr(module, class_name)
-                except (ImportError, AttributeError) as e:
-                    raise AVBCoreLoadingError(f"Error loading core '{class_name}' from '{file_name}': {e}")
+                except (FileNotFoundError, ImportError, AttributeError) as e:
+                    raise AVBCoreLoadingError(f"Error loading core '{class_name}' from '{core_path}': {e}")
 
                 # Instantiate the core and set its priority and shutdown event
                 try:
@@ -109,12 +116,11 @@ class AVBCoreManager:
 
     def start_cores(self):
         """
-        Starts each core in a separate thread and begins the heartbeat.
+        Starts each core in a separate thread.
         """
-        self.start_heartbeat()  # Start the heartbeat thread
         
         for core in self.cores:
-            thread = threading.Thread(target=core.run, name=f"{core.name}_thread")
+            thread = threading.Thread(target=core.initialize, name=f"{core.name}_thread")
             thread.start()
             self.threads.append(thread)
             print(f"Started {core.name} core in a separate thread.")
