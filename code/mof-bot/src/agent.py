@@ -15,6 +15,8 @@ import splash
 import result
 import fools_content
 
+from dbh import DBH
+
 from cores.avbcore_manager import AVBCoreManager
 from cores.avbcore_exceptions import AVBCoreHeartbeatError, AVBCoreRegistryFileError, AVBCoreLoadingError
 
@@ -50,6 +52,10 @@ splash.display()
 
 # Load content
 fools_content.load_available_content()
+
+# Set database handler
+dbh = DBH.get_instance()
+db_conn = dbh.get_connection()
 
 # Initialize CoreManager
 cores = AVBCoreManager()
