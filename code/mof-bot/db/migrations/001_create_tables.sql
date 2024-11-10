@@ -40,3 +40,20 @@ CREATE INDEX idx_being_type ON being (type);
 
 -- Index for the "name" column to optimize queries involving name
 CREATE INDEX idx_being_name ON being (name);
+
+-- Drop the loyalty_target table if it exists to ensure a fresh start
+DROP TABLE IF EXISTS loyalty_target;
+
+-- Create the "loyalty_target" table with unique constraint on "being_id"
+CREATE TABLE loyalty_target (
+    being_id INTEGER NOT NULL UNIQUE,
+    rate REAL NOT NULL CHECK (rate >= 0.0 AND rate <= 1.0)
+);
+
+-- Insert default records
+INSERT INTO loyalty_target (being_id, rate) VALUES
+    (2, 1.0),
+    (3, 1.0);
+
+-- Index for the "rate" column to optimize queries involving rate
+CREATE INDEX idx_loyalty_target_rate ON loyalty_target (rate);
