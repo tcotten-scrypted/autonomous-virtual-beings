@@ -144,7 +144,7 @@ def execute(time_start, job_queue, results_queue):
                 log_event("Generating content for scheduled tweet.")
                 print("Generating content for scheduled tweet.")
                 event.content = create_tweet_content(previous_post)
-
+                
             # Check if the timestamp has been reached and send the tweet if content is ready
             if event.event_time <= now and event.content:
                 try:
@@ -171,7 +171,8 @@ def execute(time_start, job_queue, results_queue):
 
     # If no active events, schedule a new one
     if not any(event for event in scheduler_list if not event.completed):
-        prepare_tweet_for_scheduling()
+        # DEBUGGING, DISABLED prepare_tweet_for_scheduling()
+        pass
 
 def prepare_tweet_for_scheduling():
     delay_minutes = int(np.random.normal(loc=25, scale=10))
