@@ -4,3 +4,4 @@ numpy
 rich
 openai
 pytest
+pandas

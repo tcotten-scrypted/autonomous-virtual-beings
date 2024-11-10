@@ -20,7 +20,27 @@ def initialize_twitter_client(bearer_token):
     return client
 
 def extract_content_from_fool(handle, max_tweets=1000):
-    """Extract full tweet text content from the specified handle's timeline and save it as a JSON file."""
+    """
+    Extract tweet content, engagement metrics, and other key information from a specified handle's timeline
+    and save it as a JSON file.
+
+    Parameters:
+    - handle (str): Twitter handle to extract tweets from (without '@').
+    - max_tweets (int): Maximum number of tweets to retrieve. Default is 1000.
+
+    This function captures the following data for each tweet:
+    - text: Full text of the tweet.
+    - hashtags: List of hashtags used in the tweet.
+    - mentions: List of mentioned usernames in the tweet.
+    - tickers: List of cryptocurrency tickers (e.g., $AVB) referenced in the tweet.
+    - retweet_count: Number of retweets.
+    - like_count: Number of likes.
+    - quote_count: Number of quotes.
+    - reply_count: Number of replies.
+    - created_at: Timestamp of when the tweet was created in ISO format.
+
+    The function handles pagination and rate limits for large extractions.
+    """
     bearer_token = load_env_variables()
     client = initialize_twitter_client(bearer_token)
     
@@ -44,7 +64,35 @@ def extract_content_from_fool(handle, max_tweets=1000):
                 
                 if response.data:
                     for tweet in response.data:
-                        tweet_texts.append(tweet.text)
+                        # Extract engagement metrics
+                        retweet_count = tweet.public_metrics["retweet_count"]
+                        like_count = tweet.public_metrics["like_count"]
+                        quote_count = tweet.public_metrics["quote_count"]
+                        reply_count = tweet.public_metrics["reply_count"]
+
+                        # Extract entities (hashtags, mentions, cashtags)
+                        hashtags, mentions, tickers = [], [], []
+                        if tweet.entities:
+                            if "hashtags" in tweet.entities:
+                                hashtags = [hashtag["tag"] for hashtag in tweet.entities["hashtags"]]
+                            if "mentions" in tweet.entities:
+                                mentions = [mention["username"] for mention in tweet.entities["mentions"]]
+                            if "cashtags" in tweet.entities:
+                                tickers = [cashtag["tag"] for cashtag in tweet.entities["cashtags"]]
+
+                        # Construct tweet data dictionary
+                        tweet_data = {
+                            "text": tweet.text,
+                            "hashtags": hashtags,
+                            "mentions": mentions,
+                            "tickers": tickers,
+                            "retweet_count": retweet_count,
+                            "like_count": like_count,
+                            "quote_count": quote_count,
+                            "reply_count": reply_count,
+                            "created_at": tweet.created_at.isoformat()  # Convert datetime to string
+                        }
+                        tweet_texts.append(tweet_data)
                 else:
                     break  # No more tweets available
 
