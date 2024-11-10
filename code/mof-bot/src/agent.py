@@ -16,6 +16,7 @@ import result
 import fools_content
 
 from cores.avbcore_manager import AVBCoreManager
+from cores.avbcore_exceptions import AVBCoreHeartbeatError, AVBCoreRegistryFileError, AVBCoreLoadingError
 
 from worker_pick_lore import pick_lore
 from worker_pick_foolish_content import pick_n_posts
@@ -50,16 +51,34 @@ splash.display()
 # Load content
 fools_content.load_available_content()
 
-# Load cores
+# Initialize CoreManager
 cores = AVBCoreManager()
 
+# Start the heartbeat, ensuring no conflicting instance is running
 try:
     cores.start_heartbeat()
-except RuntimeError as e:
+except AVBCoreHeartbeatError as e:
     print(f"Error: {e}")
-    print("Agent did not start due to an existing heartbeat file.")
-    
-    exit()
+    print("Agent did not start because a heartbeat file was already present. Ensure no other instance is running.")
+    sys.exit(1)
+
+# Load cores from the registry
+try:
+    cores.load_cores()
+except AVBCoreRegistryFileError as e:
+    print(f"Error: {e}")
+    print("Agent did not start due to an issue with the core registry file. Please check its location and syntax.")
+    cores.shutdown()
+    sys.exit(1)
+except AVBCoreLoadingError as e:
+    print(f"Error: {e}")
+    print("Agent did not start because a core failed to load or initialize. Please check core configurations.")
+    cores.shutdown()
+    sys.exit(1)
+
+# Start cores and begin the main loop
+cores.start_cores()
+print("Core manager is now running. Press Ctrl+C to stop.")
 
 # Running control
 running = True
