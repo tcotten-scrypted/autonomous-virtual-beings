@@ -1,0 +1,5 @@
+# Ignore everything in ./tmp
+*
+
+# Except this .gitignore
+!.gitignore
