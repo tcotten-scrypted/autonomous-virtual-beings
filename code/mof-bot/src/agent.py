@@ -15,6 +15,8 @@ import splash
 import result
 import fools_content
 
+from cores.avbcore_manager import AVBCoreManager
+
 from worker_pick_lore import pick_lore
 from worker_pick_foolish_content import pick_n_posts
 from worker_pick_random_effects import pick_effects
@@ -48,6 +50,17 @@ splash.display()
 # Load content
 fools_content.load_available_content()
 
+# Load cores
+cores = AVBCoreManager()
+
+try:
+    cores.start_heartbeat()
+except RuntimeError as e:
+    print(f"Error: {e}")
+    print("Agent did not start due to an existing heartbeat file.")
+    
+    exit()
+
 # Running control
 running = True
 
@@ -59,8 +72,14 @@ previous_post = ""
 
 # Signal handler
 def signal_handler(sig, frame):
+    # Shut down the cores' heartbeat
+    cores.shutdown()
+    
+    # Stop running the main parent tick
     global running
     running = False
+    
+    # Log the shutdown
     log_event("Interrupt received, shutting down gracefully...")
     print("\nInterrupt received, shutting down gracefully...")
 

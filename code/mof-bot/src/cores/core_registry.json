@@ -1,0 +1,10 @@
+{
+    "cores": [
+        {
+            "file": "loyalty.py",
+            "class": "LoyaltyCore",
+            "name": "Loyalty",
+            "priority": 1
+        }
+    ]
+}
