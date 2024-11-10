@@ -48,7 +48,7 @@ def log_event(message):
     print(f"[LOG] {message}")  # Print to console for immediate feedback
 
 # Splash display
-splash.display()
+splash.display("Westworld (v0.0.2)")
 
 # Load content
 fools_content.load_available_content()
@@ -218,6 +218,8 @@ def tick():
             time_elapsed = (time.time() - time_start) * 1000
             time_sleep = max(0, TICK - time_elapsed) / 1000
             time.sleep(time_sleep)
+
+exit()
 
 if __name__ == "__main__":
     log_event("Starting agent...")
