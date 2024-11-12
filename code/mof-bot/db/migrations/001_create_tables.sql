@@ -57,3 +57,20 @@ INSERT INTO loyalty_target (being_id, rate) VALUES
 
 -- Index for the "rate" column to optimize queries involving rate
 CREATE INDEX idx_loyalty_target_rate ON loyalty_target (rate);
+
+-- Create the "social" table with unique constraint on "being_id"
+CREATE TABLE IF NOT EXISTS social (
+    being_id INTEGER NOT NULL UNIQUE,
+    x_id TEXT,
+    x_handle TEXT
+);
+
+-- Insert default records
+INSERT INTO social (being_id, x_id, x_handle) VALUES
+    (1, "745959759057133568", "@cottenio"),
+    (2, "1476979028716314625", "@scryptedinc"),
+    (3, "1852072566774468608", "@chad_onchain");
+
+-- Create indexes on x_id and x_handle for faster lookup
+CREATE INDEX IF NOT EXISTS idx_social_x_id ON social (x_id);
+CREATE INDEX IF NOT EXISTS idx_social_x_handle ON social (x_handle);
