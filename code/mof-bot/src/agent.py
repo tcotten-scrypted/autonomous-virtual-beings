@@ -69,16 +69,21 @@ previous_post = ""
 async def shutdown():
     """Asynchronously stops the TickManager and shuts down cores."""
     logger.async_log("Interrupt received, shutting down gracefully...")
-    await tick_manager.stop()  # Gracefully stops the TickManager
+    try:
+        await tick_manager.stop()  # Gracefully stops the TickManager
+    except Exception as e:
+        logger.async_log(f"Error during TickManager stop: {e}")
     cores.shutdown()
-    print("\nInterrupt received, shutting down gracefully...")
+    logger.async_log("Shutdown complete.")
 
-# Signal handler that schedules the async shutdown function
-def signal_handler(sig, frame):
+# Dedicated handler for shutdown signals
+def shutdown_handler(sig, frame):
+    """Handles shutdown signals by scheduling the shutdown coroutine."""
     asyncio.create_task(shutdown())  # Schedule shutdown as a task on the event loop
-    
-# Register the signal handler
-signal.signal(signal.SIGINT, signal_handler)
+
+# Register shutdown_handler specifically for shutdown signals
+signal.signal(signal.SIGINT, shutdown_handler)
+signal.signal(signal.SIGTERM, shutdown_handler)
 
 # Define the TickManager at a module level so it can be accessed in the signal handler
 tick_manager = TickManager(
