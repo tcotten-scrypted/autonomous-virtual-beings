@@ -5,3 +5,4 @@ rich
 openai
 pytest
 pandas
+aiofiles

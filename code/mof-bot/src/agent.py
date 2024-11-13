@@ -5,6 +5,7 @@ import sys
 import queue
 import numpy as np
 import tweepy
+import asyncio
 from datetime import datetime, timedelta
 from rich.console import Console
 from rich.live import Live
@@ -26,7 +27,11 @@ from worker_pick_random_effects import pick_effects
 from worker_mixture_of_fools_llm import try_mixture
 from worker_send_tweet import send_tweet
 
+from logger import EventLogger
+
 from dotenv import load_dotenv
+
+console = Console()
 
 load_dotenv()
 DEBUGGING=os.getenv("DEBUGGING")
@@ -36,16 +41,11 @@ TICK = 1000  # 1000ms = 1 second
 LOG_DIR = os.path.join(os.path.dirname(__file__), "../log/")
 LOG_FILE = os.path.join(LOG_DIR, "agent.log")
 
+logger = EventLogger(console, LOG_FILE)
+
 # Ensure log directory exists
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
-
-# Function to log events to a file
-def log_event(message):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOG_FILE, "a", encoding='utf-8') as log_file:
-        log_file.write(f"[{timestamp}] {message}\n")
-    print(f"[LOG] {message}")  # Print to console for immediate feedback
 
 # Splash display
 splash.display("Westworld (v0.0.2)")
@@ -105,7 +105,7 @@ def signal_handler(sig, frame):
     running = False
     
     # Log the shutdown
-    log_event("Interrupt received, shutting down gracefully...")
+    logger.async_log("Interrupt received, shutting down gracefully...")
     print("\nInterrupt received, shutting down gracefully...")
 
 signal.signal(signal.SIGINT, signal_handler)
@@ -124,7 +124,7 @@ class ScheduledEvent:
         else:
             self.backoff_time *= 2  # Double the backoff time
         self.event_time += timedelta(minutes=self.backoff_time)
-        log_event(f"Rescheduled with backoff: {self.backoff_time} minute(s)")
+        logger.async_log(f"Rescheduled with backoff: {self.backoff_time} minute(s)")
         print(f"Rescheduled with backoff: {self.backoff_time} minute(s)")
 
 def has_time_remaining(time_start):
@@ -141,7 +141,7 @@ def execute(time_start, job_queue, results_queue):
         if not event.completed:
             # Immediately create content if it's not already created
             if not event.content:
-                log_event("Generating content for scheduled tweet.")
+                logger.async_log("Generating content for scheduled tweet.")
                 print("Generating content for scheduled tweet.")
                 event.content = create_tweet_content(previous_post)
                 
@@ -149,23 +149,23 @@ def execute(time_start, job_queue, results_queue):
             if event.event_time <= now and event.content:
                 try:
                     if not DEBUGGING:
-                        send_tweet(event.content, log_event)
+                        send_tweet(event.content, logger.async_log)
                         
-                    log_event(f"Tweet sent successfully: {event.content}")
+                    logger.async_log(f"Tweet sent successfully: {event.content}")
                     print(f"Tweet sent successfully at {now}.")
                     event.completed = True
                     event.backoff_time = 0  # Reset backoff after successful send
                     previous_post = event.content
                 except tweepy.errors.TooManyRequests as e:
-                    log_event(f"Rate limit error while sending tweet: {e}")
+                    logger.async_log(f"Rate limit error while sending tweet: {e}")
                     print(f"Rate limit error while sending tweet: {e}")
                     event.apply_backoff()
                 except tweepy.errors.TweepyException as e:
-                    log_event(f"Error while sending tweet: {e}")
+                    logger.async_log(f"Error while sending tweet: {e}")
                     print(f"Error while sending tweet: {e}")
                     event.apply_backoff()
                 except Exception as e:
-                    log_event(f"Unexpected error while sending tweet: {e}")
+                    logger.async_log(f"Unexpected error while sending tweet: {e}")
                     print(f"Unexpected error while sending tweet: {e}")
                     event.apply_backoff()
 
@@ -182,7 +182,7 @@ def prepare_tweet_for_scheduling():
         delay_minutes = 1
 
     event_time = datetime.now() + timedelta(minutes=delay_minutes)
-    log_event(f"Scheduled a new tweet event at {event_time}.")
+    logger.async_log(f"Scheduled a new tweet event at {event_time}.")
     print(f"Scheduled a new tweet event at {event_time}.")
     scheduler_list.append(ScheduledEvent(event_time, "Scheduled tweet post"))
 
@@ -191,19 +191,18 @@ def create_tweet_content(post_prev):
         lore = pick_lore()
         posts = pick_n_posts(3, fools_content)
         effects = pick_effects()
-        tweet = try_mixture(posts, post_prev, lore, effects, log_event)
-        log_event(f"Prepared tweet content: {tweet}")
+        tweet = try_mixture(posts, post_prev, lore, effects, logger.async_log)
+        logger.async_log(f"Prepared tweet content: {tweet}")
         print(f"Prepared tweet content:\n\n\t{tweet}\n")
         return tweet
     except Exception as e:
-        log_event(f"Error while preparing tweet content: {e}")
+        logger.async_log(f"Error while preparing tweet content: {e}")
         print(f"Error while preparing tweet content: {e}")
         return None
 
 def tick():
     job_queue = queue.Queue()
     results_queue = queue.Queue()
-    console = Console()
     
     with Live(console=console, refresh_per_second=4) as live:
         while running:
@@ -221,8 +220,8 @@ def tick():
             time.sleep(time_sleep)
 
 if __name__ == "__main__":
-    log_event("Starting agent...")
+    logger.async_log("Starting agent...")
     print("Starting agent...")
     tick()
-    log_event("Agent stopped.")
+    logger.async_log("Agent stopped.")
     print("Agent stopped.")
