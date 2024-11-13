@@ -67,7 +67,6 @@ class TickManager:
             await self.logger.async_log(f"Failed to read heartbeat file: {e}", color="red")
             return None
 
-
     async def _update_heartbeat(self):
         """Writes the current timestamp to the heartbeat file, signaling system health."""
         success = False
@@ -85,7 +84,7 @@ class TickManager:
                 else:
                     self.logger.async_log("Max retries reached. Unable to update heartbeat file.", color="red")  # Removed 'await'
 
-    async def initialize_and_start(self):
+    async def initialize_and_start(self, execute):
         """
         Initializes the TickManager by loading cores and starting the tick loop.
         Ensures the heartbeat is checked and written before loading cores to avoid conflicts.
@@ -100,7 +99,7 @@ class TickManager:
             self.logger.async_log("Cores loaded successfully.")  # Removed 'await'
             
             # Start the tick loop
-            await self.start_tick_loop()
+            await self.start_tick_loop(execute)
 
         except TickManagerHeartbeatError as e:
             self.logger.async_log(f"Startup aborted: {e}", color="red")  # Removed 'await'
@@ -122,7 +121,7 @@ class TickManager:
             self.logger.async_log(f"Core loading failure: {e}", color="red")
             raise
 
-    async def start_tick_loop(self):
+    async def start_tick_loop(self, execute):
         """Begins the Tick loop, broadcasting Tick events and updating the heartbeat."""
         self.logger.async_log("TickManager started.")
         self.running = True
@@ -135,6 +134,10 @@ class TickManager:
                 
                 # Notify agents of the new Tick
                 self.tick_event.set()  # Broadcast the tick
+                
+                # Key logic to execute during the tick
+                execute() 
+                
                 self.tick_event.clear()  # Reset the event for the next tick
                 
                 # Display a spinner or current tick status on the console

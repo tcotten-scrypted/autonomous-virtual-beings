@@ -98,10 +98,12 @@ def has_time_remaining(time_start):
     time_elapsed = (time.time() - time_start) * 1000  # Convert to milliseconds
     return time_elapsed < TICK_INTERVAL_MS
 
-def execute(time_start, job_queue, results_queue):
+def execute():
     global previous_post
+    global console
+    
     now = datetime.now()
-
+    
     # Iterate over scheduled events
     for event in scheduler_list:
         if not event.completed:
@@ -129,7 +131,7 @@ def execute(time_start, job_queue, results_queue):
                     event.apply_backoff()
 
     if not any(event for event in scheduler_list if not event.completed):
-        pass  # DEBUGGING, prepare_tweet_for_scheduling()
+        prepare_tweet_for_scheduling()
 
 def prepare_tweet_for_scheduling():
     delay_minutes = int(np.random.normal(loc=25, scale=10))
@@ -157,9 +159,8 @@ def create_tweet_content(post_prev):
 async def main():
     try:
         # Start the tick manager
-        await tick_manager.initialize_and_start()
+        await tick_manager.initialize_and_start(execute)
         logger.async_log("TickManager stopped successfully.")
-        
     except TickManagerHeartbeatError as e:
         logger.async_log(f"Agent startup aborted: {e}", color="red")
         sys.exit(1)
