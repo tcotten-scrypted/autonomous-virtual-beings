@@ -59,10 +59,14 @@ class TickManager:
         try:
             async with aiofiles.open(self.heartbeat_file, 'r') as f:
                 timestamp_str = await f.read()
+                if not timestamp_str.strip():  # Check if the string is empty
+                    self.logger.async_log("Heartbeat file is empty, no valid timestamp found.")
+                    return None  # or use `datetime.now()` if you prefer a fallback timestamp
                 return datetime.fromisoformat(timestamp_str.strip())
         except Exception as e:
             await self.logger.async_log(f"Failed to read heartbeat file: {e}", color="red")
             return None
+
 
     async def _update_heartbeat(self):
         """Writes the current timestamp to the heartbeat file, signaling system health."""
