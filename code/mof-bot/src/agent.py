@@ -28,6 +28,7 @@ from worker_mixture_of_fools_llm import try_mixture
 from worker_send_tweet import send_tweet
 
 from logger import EventLogger
+from scheduled_event import ScheduledEvent
 
 from dotenv import load_dotenv
 
@@ -109,23 +110,6 @@ def signal_handler(sig, frame):
     print("\nInterrupt received, shutting down gracefully...")
 
 signal.signal(signal.SIGINT, signal_handler)
-
-class ScheduledEvent:
-    def __init__(self, event_time, description="", backoff_time=0):
-        self.event_time = event_time
-        self.description = description
-        self.completed = False
-        self.content = None  # Holds content if generated
-        self.backoff_time = backoff_time  # Initial backoff time in minutes
-
-    def apply_backoff(self):
-        if self.backoff_time == 0:
-            self.backoff_time = 5  # Start with 5 minutes if not set
-        else:
-            self.backoff_time *= 2  # Double the backoff time
-        self.event_time += timedelta(minutes=self.backoff_time)
-        logger.async_log(f"Rescheduled with backoff: {self.backoff_time} minute(s)")
-        print(f"Rescheduled with backoff: {self.backoff_time} minute(s)")
 
 def has_time_remaining(time_start):
     time_elapsed = (time.time() - time_start) * 1000  # Convert to milliseconds
