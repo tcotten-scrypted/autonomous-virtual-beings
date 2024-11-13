@@ -1,15 +1,12 @@
 import os
-import time
 import signal
+import time
 import sys
-import queue
 import numpy as np
 import tweepy
 import asyncio
 from datetime import datetime, timedelta
 from rich.console import Console
-from rich.live import Live
-from rich.spinner import Spinner
 
 import setup
 import splash
@@ -19,7 +16,6 @@ import fools_content
 from dbh import DBH
 
 from cores.avbcore_manager import AVBCoreManager
-from cores.avbcore_exceptions import AVBCoreHeartbeatError, AVBCoreRegistryFileError, AVBCoreLoadingError
 
 from worker_pick_lore import pick_lore
 from worker_pick_foolish_content import pick_n_posts
@@ -30,17 +26,21 @@ from worker_send_tweet import send_tweet
 from logger import EventLogger
 from scheduled_event import ScheduledEvent
 
+from tick.manager import TickManager  # Import TickManager
+from tick.tick_exceptions import TickManagerHeartbeatError  # Import the heartbeat exception
+
 from dotenv import load_dotenv
 
 console = Console()
 
 load_dotenv()
-DEBUGGING=os.getenv("DEBUGGING")
+DEBUGGING = os.getenv("DEBUGGING")
 
-TICK = 1000  # 1000ms = 1 second
+TICK_INTERVAL_MS = 1000  # 1000ms = 1 second
 
 LOG_DIR = os.path.join(os.path.dirname(__file__), "../log/")
 LOG_FILE = os.path.join(LOG_DIR, "agent.log")
+HEARTBEAT_FILE = os.path.join(LOG_DIR, "heartbeat.log")
 
 logger = EventLogger(console, LOG_FILE)
 
@@ -58,105 +58,73 @@ fools_content.load_available_content()
 dbh = DBH.get_instance()
 db_conn = dbh.get_connection()
 
-# Initialize CoreManager
+# Initialize CoreManager instance (to pass into TickManager)
 cores = AVBCoreManager()
-
-# Start the heartbeat, ensuring no conflicting instance is running
-try:
-    cores.start_heartbeat()
-except AVBCoreHeartbeatError as e:
-    print(f"Error: {e}")
-    print("Agent did not start because a heartbeat file was already present. Ensure no other instance is running.")
-    sys.exit(1)
-
-# Load cores from the registry
-try:
-    cores.load_cores()
-except AVBCoreRegistryFileError as e:
-    print(f"Error: {e}")
-    print("Agent did not start due to an issue with the core registry file. Please check its location and syntax.")
-    cores.shutdown()
-    sys.exit(1)
-except AVBCoreLoadingError as e:
-    print(f"Error: {e}")
-    print("Agent did not start because a core failed to load or initialize. Please check core configurations.")
-    cores.shutdown()
-    sys.exit(1)
-
-# Start cores and begin the main loop
-cores.start_cores()
-print("Core manager is now running. Press Ctrl+C to stop.")
-
-# Running control
-running = True
 
 # Scheduler list to hold events
 scheduler_list = []
-
-# Last post
 previous_post = ""
 
-# Signal handler
-def signal_handler(sig, frame):
-    # Shut down the cores' heartbeat
-    cores.shutdown()
-    
-    # Stop running the main parent tick
-    global running
-    running = False
-    
-    # Log the shutdown
+# Asynchronous shutdown function
+async def shutdown():
+    """Asynchronously stops the TickManager and shuts down cores."""
     logger.async_log("Interrupt received, shutting down gracefully...")
+    await tick_manager.stop()  # Gracefully stops the TickManager
+    cores.shutdown()
     print("\nInterrupt received, shutting down gracefully...")
 
+# Signal handler that schedules the async shutdown function
+def signal_handler(sig, frame):
+    asyncio.create_task(shutdown())  # Schedule shutdown as a task on the event loop
+    
+# Register the signal handler
 signal.signal(signal.SIGINT, signal_handler)
+
+# Define the TickManager at a module level so it can be accessed in the signal handler
+tick_manager = TickManager(
+    tick_interval_ms=TICK_INTERVAL_MS,
+    console=console,
+    heartbeat_file=HEARTBEAT_FILE,
+    logger=logger,
+    cores=cores
+)
 
 def has_time_remaining(time_start):
     time_elapsed = (time.time() - time_start) * 1000  # Convert to milliseconds
-    return time_elapsed < TICK
+    return time_elapsed < TICK_INTERVAL_MS
 
 def execute(time_start, job_queue, results_queue):
     global previous_post
-
     now = datetime.now()
 
     # Iterate over scheduled events
     for event in scheduler_list:
         if not event.completed:
-            # Immediately create content if it's not already created
             if not event.content:
                 logger.async_log("Generating content for scheduled tweet.")
-                print("Generating content for scheduled tweet.")
                 event.content = create_tweet_content(previous_post)
                 
-            # Check if the timestamp has been reached and send the tweet if content is ready
             if event.event_time <= now and event.content:
                 try:
                     if not DEBUGGING:
                         send_tweet(event.content, logger.async_log)
                         
                     logger.async_log(f"Tweet sent successfully: {event.content}")
-                    print(f"Tweet sent successfully at {now}.")
                     event.completed = True
-                    event.backoff_time = 0  # Reset backoff after successful send
+                    event.backoff_time = 0
                     previous_post = event.content
                 except tweepy.errors.TooManyRequests as e:
                     logger.async_log(f"Rate limit error while sending tweet: {e}")
-                    print(f"Rate limit error while sending tweet: {e}")
                     event.apply_backoff()
                 except tweepy.errors.TweepyException as e:
                     logger.async_log(f"Error while sending tweet: {e}")
-                    print(f"Error while sending tweet: {e}")
                     event.apply_backoff()
                 except Exception as e:
                     logger.async_log(f"Unexpected error while sending tweet: {e}")
-                    print(f"Unexpected error while sending tweet: {e}")
                     event.apply_backoff()
 
-    # If no active events, schedule a new one
     if not any(event for event in scheduler_list if not event.completed):
-        # DEBUGGING, DISABLED prepare_tweet_for_scheduling()
-        pass
+        pass  # DEBUGGING, prepare_tweet_for_scheduling()
 
 def prepare_tweet_for_scheduling():
     delay_minutes = int(np.random.normal(loc=25, scale=10))
@@ -167,7 +135,6 @@ def prepare_tweet_for_scheduling():
 
     event_time = datetime.now() + timedelta(minutes=delay_minutes)
     logger.async_log(f"Scheduled a new tweet event at {event_time}.")
-    print(f"Scheduled a new tweet event at {event_time}.")
     scheduler_list.append(ScheduledEvent(event_time, "Scheduled tweet post"))
 
 def create_tweet_content(post_prev):
@@ -177,33 +144,24 @@ def create_tweet_content(post_prev):
         effects = pick_effects()
         tweet = try_mixture(posts, post_prev, lore, effects, logger.async_log)
         logger.async_log(f"Prepared tweet content: {tweet}")
-        print(f"Prepared tweet content:\n\n\t{tweet}\n")
         return tweet
     except Exception as e:
         logger.async_log(f"Error while preparing tweet content: {e}")
-        print(f"Error while preparing tweet content: {e}")
         return None
 
-def tick():
-    logger.async_log("Starting agent...")
-    
-    job_queue = queue.Queue()
-    results_queue = queue.Queue()
-    
-    with Live(console=console, refresh_per_second=4) as live:
-        while running:
-            time_start = time.time()
-            
-            # Display the spinner and current epoch time
-            current_epoch = int(time.time())
-            spinner = Spinner("dots", f" Tick | Epoch Time: {current_epoch}")
-            live.update(spinner)
-            
-            execute(time_start, job_queue, results_queue)
-            
-            time_elapsed = (time.time() - time_start) * 1000
-            time_sleep = max(0, TICK - time_elapsed) / 1000
-            time.sleep(time_sleep)
+async def main():
+    try:
+        # Start the tick manager
+        await tick_manager.initialize_and_start()
+        logger.async_log("TickManager stopped successfully.")
+        
+    except TickManagerHeartbeatError as e:
+        logger.async_log(f"Agent startup aborted: {e}", color="red")
+        sys.exit(1)
+    except Exception as e:
+        logger.async_log(f"Unexpected startup error: {e}", color="red")
+        await tick_manager.stop()
+        sys.exit(1)
 
 if __name__ == "__main__":
-    tick()
+    asyncio.run(main())
