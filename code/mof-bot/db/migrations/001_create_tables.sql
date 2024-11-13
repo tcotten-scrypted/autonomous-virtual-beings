@@ -74,3 +74,17 @@ INSERT INTO social (being_id, x_id, x_handle) VALUES
 -- Create indexes on x_id and x_handle for faster lookup
 CREATE INDEX IF NOT EXISTS idx_social_x_id ON social (x_id);
 CREATE INDEX IF NOT EXISTS idx_social_x_handle ON social (x_handle);
+
+CREATE TABLE IF NOT EXISTS agent_prompt_system (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert default records
+INSERT INTO agent_prompt_system (content) VALUES
+    ("The following is a conversation with an AI assistant tasked with crafting tweets according to various requested levels of humor, vulgarity, and shock,");
+
+-- Create indexes on id and created_at for faster lookup
+CREATE INDEX IF NOT EXISTS idx_agent_prompt_system_id ON agent_prompt_system (id);
+CREATE INDEX IF NOT EXISTS idx_agent_prompt_system_created_at ON agent_prompt_system (created_at);

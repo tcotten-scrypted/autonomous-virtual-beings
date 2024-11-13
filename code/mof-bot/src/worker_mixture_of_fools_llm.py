@@ -9,6 +9,9 @@ from openai import OpenAI
 from typing import List, Dict
 from dotenv import load_dotenv
 
+from dbh import DBH
+from specification.avbspecification_exceptions import AVBSpecificationError
+
 LLM_MODEL_VERSION_MIN = "gpt-4o"
 
 load_dotenv()
@@ -75,10 +78,31 @@ def replace_words(text):
         text,
         flags=re.IGNORECASE  # Case insensitive
     )
+    
+def get_prompt_system():
+    # Set database handler
+    dbh = DBH.get_instance()
+    db_conn = dbh.get_connection()
+    
+    try:
+        cursor = db_conn.cursor()
+        cursor.execute("SELECT content FROM agent_prompt_system ORDER BY id DESC LIMIT 1")
+        result = cursor.fetchone()
+        
+        if result:
+            return result[0]
+        else:
+            raise AVBSpecificationError("No prompts found in the agent_prompt_system table.")
+    except Exception as e:
+        raise AVBSpecificationError(f"Error fetching prompt system: {e}")
+    finally:
+        cursor.close()
 
 def try_mixture(posts, post_prev, lore, effects, log_event):
     validate_api()
-
+    
+    agent_prompt_system = get_prompt_system()
+    
     author_0 = ""
     author_1 = ""
 
@@ -184,7 +208,7 @@ OBJECTIVES:
     messages=[
         {
             "role": "system",
-            "content": "The following is a conversation with an AI assistant tasked with crafting tweets according to various requested levels of humor, vulgarity, and shock,"
+            "content": agent_prompt_system
         },
         {"role": "user", "content": content},
     ])
