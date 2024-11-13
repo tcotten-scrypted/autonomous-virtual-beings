@@ -185,6 +185,8 @@ def create_tweet_content(post_prev):
         return None
 
 def tick():
+    logger.async_log("Starting agent...")
+    
     job_queue = queue.Queue()
     results_queue = queue.Queue()
     
@@ -204,8 +206,4 @@ def tick():
             time.sleep(time_sleep)
 
 if __name__ == "__main__":
-    logger.async_log("Starting agent...")
-    print("Starting agent...")
     tick()
-    logger.async_log("Agent stopped.")
-    print("Agent stopped.")
