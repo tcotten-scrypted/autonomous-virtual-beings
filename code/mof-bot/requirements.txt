@@ -6,3 +6,4 @@ openai
 pytest
 pandas
 aiofiles
+playwright

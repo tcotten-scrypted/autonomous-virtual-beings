@@ -14,7 +14,6 @@ import result
 import fools_content
 
 from dbh import DBH
-
 from cores.avbcore_manager import AVBCoreManager
 
 from worker_pick_lore import pick_lore
@@ -24,19 +23,19 @@ from worker_mixture_of_fools_llm import try_mixture
 from worker_send_tweet import send_tweet
 
 from logger import EventLogger
-from scheduled_event import ScheduledEvent
+from scheduled_event import ScheduledEvent  # Updated ScheduledEvent class
 
-from tick.manager import TickManager  # Import TickManager
-from tick.tick_exceptions import TickManagerHeartbeatError  # Import the heartbeat exception
+from tick.manager import TickManager
+from tick.tick_exceptions import TickManagerHeartbeatError
 
 from dotenv import load_dotenv
 
 console = Console()
-
 load_dotenv()
+
 DEBUGGING = os.getenv("DEBUGGING")
 
-TICK_INTERVAL_MS = 1000  # 1000ms = 1 second
+TICK_INTERVAL_MS = 1000  # 1 second
 
 LOG_DIR = os.path.join(os.path.dirname(__file__), "../log/")
 LOG_FILE = os.path.join(LOG_DIR, "agent.log")
@@ -81,7 +80,7 @@ def shutdown_handler(sig, frame):
     """Handles shutdown signals by scheduling the shutdown coroutine."""
     asyncio.create_task(shutdown())  # Schedule shutdown as a task on the event loop
 
-# Register shutdown_handler specifically for shutdown signals
+# Register shutdown_handler for shutdown signals
 signal.signal(signal.SIGINT, shutdown_handler)
 signal.signal(signal.SIGTERM, shutdown_handler)
 
@@ -100,49 +99,99 @@ def has_time_remaining(time_start):
 
 def execute():
     global previous_post
-    global console
     
     now = datetime.now()
     
-    # Iterate over scheduled events
+    # Process scheduled events
     for event in scheduler_list:
         if not event.completed:
+            # Generate content if not already generated
             if not event.content:
-                logger.async_log("Generating content for scheduled tweet.")
-                event.content = create_tweet_content(previous_post)
-                
+                if event.event_type == "meme":
+                    logger.async_log("Generating content for scheduled meme event.")
+                    event.content = create_meme_content()
+                elif event.event_type == "tweet":
+                    logger.async_log("Generating content for scheduled tweet event.")
+                    event.content = create_tweet_content(previous_post)
+                else:
+                    logger.async_log(f"Unknown event type '{event.event_type}'. Skipping.")
+                    event.completed = True
+                    continue
+
+            # Check if it's time to execute the event
             if event.event_time <= now and event.content:
                 try:
+                    # Sending tweet/meme (they use the same function, just different content)
+                    # event.content is expected to have at least 'text' and optionally 'image'
+                    text = event.content.get('text', '')
+                    image = event.content.get('image', None)
+
+                    send_tweet(text, image, logger.async_log)
                     if not DEBUGGING:
-                        send_tweet(event.content, logger.async_log)
-                        
-                    logger.async_log(f"Tweet sent successfully: {event.content}")
+                        send_tweet(text, image, logger.async_log)
+
+                    if event.event_type == "meme":
+                        logger.async_log(f"Meme sent successfully: {event.content}")
+                    else:
+                        logger.async_log(f"Tweet sent successfully: {event.content}")
+
                     event.completed = True
                     event.backoff_time = 0
                     previous_post = event.content
+
                 except tweepy.errors.TooManyRequests as e:
-                    logger.async_log(f"Rate limit error while sending tweet: {e}")
+                    logger.async_log(f"Rate limit error while sending {event.event_type}: {e}")
                     event.apply_backoff()
                 except tweepy.errors.TweepyException as e:
-                    logger.async_log(f"Error while sending tweet: {e}")
+                    logger.async_log(f"Error while sending {event.event_type}: {e}")
                     event.apply_backoff()
                 except Exception as e:
-                    logger.async_log(f"Unexpected error while sending tweet: {e}")
+                    logger.async_log(f"Unexpected error while sending {event.event_type}: {e}")
                     event.apply_backoff()
 
+    # If no pending events, schedule the next ones
     if not any(event for event in scheduler_list if not event.completed):
+        # Since tweets happen multiple times a day, always schedule the next tweet
         prepare_tweet_for_scheduling()
+        # Check if we have a meme event scheduled for the day; if not, schedule one
+        if not any(e for e in scheduler_list if e.event_type == "meme" and not e.completed and e.event_time > now):
+            # prepare_meme_for_scheduling()
+            pass
 
 def prepare_tweet_for_scheduling():
-    delay_minutes = int(np.random.normal(loc=25, scale=10))
-    delay_minutes = max(5, min(80, delay_minutes))
-    
+    # Tweet scheduling on a normal distribution between 45 and 90 minutes
+    # Mean ~ 67.5, standard deviation ~ 10 (this can be adjusted)
+    delay_minutes = int(np.random.normal(loc=67.5, scale=10))
+    delay_minutes = max(45, min(90, delay_minutes))
+
     if DEBUGGING:
         delay_minutes = 1
 
     event_time = datetime.now() + timedelta(minutes=delay_minutes)
     logger.async_log(f"Scheduled a new tweet event at {event_time}.")
-    scheduler_list.append(ScheduledEvent(event_time, "Scheduled tweet post"))
+    scheduler_list.append(
+        ScheduledEvent(event_time, event_type="tweet", description="Scheduled tweet post", logger=logger)
+    )
+
+def prepare_meme_for_scheduling():
+    # Meme event once a day:
+    # Schedule the meme event approximately 24 hours from now
+    event_time = datetime.now() + timedelta(days=1)
+    logger.async_log(f"Scheduled a new meme event at {event_time}.")
+    scheduler_list.append(
+        ScheduledEvent(event_time, event_type="meme", description="Daily meme post", logger=logger)
+    )
+
+def create_meme_content():
+    try:
+        # EXAMPLE. Please implement an actual meme generator here or volunteer to become a CRPC-based node and help us out :)
+        return {
+            "text": "[MEME CONTENT GOES HERE]",
+            "image": "./dynamic_content/[FILENAME_HERE]"
+        }
+    except Exception as e:
+        logger.async_log(f"Error while preparing meme content: {e}")
+        return None
 
 def create_tweet_content(post_prev):
     try:
@@ -151,12 +200,16 @@ def create_tweet_content(post_prev):
         effects = pick_effects()
         tweet = try_mixture(posts, post_prev, lore, effects, logger.async_log)
         logger.async_log(f"Prepared tweet content: {tweet}")
-        return tweet
+        return {"text": tweet}
     except Exception as e:
         logger.async_log(f"Error while preparing tweet content: {e}")
         return None
 
 async def main():
+    # On startup, schedule one meme event for the day and the first tweet event
+    # prepare_meme_for_scheduling()
+    prepare_tweet_for_scheduling()
+
     try:
         # Start the tick manager
         await tick_manager.initialize_and_start(execute)

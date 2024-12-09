@@ -74,7 +74,7 @@ class LoyaltyCore(AVBCore):
         In a full implementation, this might pull from a database.
         """
         # Simulate loading targets from a data source
-        self.targets = ["target1", "target2", "target3"]
+        self.targets = ["cottenio", "scryptedinc"]
         print(f"Loaded {len(self.targets)} loyalty targets.")
 
     def check_targets(self):
