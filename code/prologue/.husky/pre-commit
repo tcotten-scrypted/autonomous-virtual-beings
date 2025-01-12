@@ -1,0 +1,25 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Format the code (optional)
+pnpm prettier-check
+if [ $? -ne 0 ]; then
+  echo "❌ Code formatting issues found! Commit aborted."
+  exit 1
+fi
+
+# Lint the code (optional)
+pnpm lint
+if [ $? -ne 0 ]; then
+  echo "❌ Linting failed! Commit aborted."
+  exit 1
+fi
+
+# Run tests non-interactively
+pnpm test
+if [ $? -ne 0 ]; then
+  echo "❌ Tests failed! Commit aborted."
+  exit 1
+fi
+
+

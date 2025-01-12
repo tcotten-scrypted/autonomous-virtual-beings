@@ -1,0 +1,11 @@
+node_modules/
+dist/
+logs/
+cache/
+.env
+.DS_Store
+.vscode/
+*.code-workspace
+
+.env
+.env.production
