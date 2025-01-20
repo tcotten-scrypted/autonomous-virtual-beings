@@ -1,0 +1,30 @@
+{
+  "header": {
+    "logo": {
+      "text": "h011yw00d",
+      "url": "/"
+    },
+    "links": [
+      {
+        "text": "About",
+        "url": "/about"
+      },
+      {
+        "text": "Contact",
+        "url": "/contact"
+      }
+    ],
+    "colors": {
+      "background": "bg-background/80",
+      "text": "text-foreground"
+    }
+  },
+  "background": {
+    "type": "image",
+    "source": "https://images.pexels.com/photos/1252890/pexels-photo-1252890.jpeg",
+    "options": {
+      "opacity": 0.8,
+      "blur": "2px"
+    }
+  }
+}
