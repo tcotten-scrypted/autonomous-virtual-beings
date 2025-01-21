@@ -3,6 +3,7 @@ dist/
 logs/
 cache/
 .env
+.next
 .DS_Store
 .vscode/
 *.code-workspace
