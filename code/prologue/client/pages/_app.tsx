@@ -3,7 +3,7 @@ import '@/styles/globals.css';
 
 function MyApp({ Component, pageProps }: AppProps) {
   return (
-    <div className="bg-red-500"> {/* Test wrapper */}
+    <div className="">
       <Component {...pageProps} />
     </div>
   );

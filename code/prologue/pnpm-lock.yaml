@@ -120,6 +120,9 @@ importers:
 
   client:
     dependencies:
+      '@babylonjs/core':
+        specifier: ^7.44.0
+        version: 7.44.0
       '@radix-ui/react-slot':
         specifier: ^1.1.1
         version: 1.1.1(@types/react@18.3.18)(react@18.3.1)
@@ -195,6 +198,9 @@ packages:
   '@babel/helper-validator-identifier@7.25.9':
     resolution: {integrity: sha512-Ed61U6XJc3CVRfkERJWDz4dJwKe7iLmmJsbOGu9wSloNSFttHV0I8g6UAgb7qnK5ly5bGLPd4oXZlxCdANBOWQ==}
     engines: {node: '>=6.9.0'}
+
+  '@babylonjs/core@7.44.0':
+    resolution: {integrity: sha512-1KJ7ndLDSOgNSZIOU2PxMcS/EOkK7nCocuMgZR2zDgrMqMXu+Hsk3rHmLp+9lDFFjA1DCFVyoy010a/1hHr8GA==}
 
   '@commitlint/cli@19.6.1':
     resolution: {integrity: sha512-8hcyA6ZoHwWXC76BoC8qVOSr8xHy00LZhZpauiD0iO0VYbVhMnED0da85lTfIULxl7Lj4c6vZgF0Wu/ed1+jlQ==}
@@ -2050,6 +2056,8 @@ snapshots:
       picocolors: 1.1.1
 
   '@babel/helper-validator-identifier@7.25.9': {}
+
+  '@babylonjs/core@7.44.0': {}
 
   '@commitlint/cli@19.6.1(@types/node@22.10.7)(typescript@5.7.3)':
     dependencies:

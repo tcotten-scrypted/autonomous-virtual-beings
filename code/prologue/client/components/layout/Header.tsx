@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import Link from "next/link";
 import { HeaderConfig } from "@/types/config";
 
 interface HeaderProps {
@@ -7,10 +7,10 @@ interface HeaderProps {
 
 export function Header({ config }: HeaderProps) {
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 px-4 py-3 ${config.colors.background}`}>
+    <header style={{ backgroundColor: config.colors.background }} className="fixed top-0 left-0 right-0 z-50 px-4 py-3">
       <div className="container mx-auto flex items-center justify-between">
         <Link href={config.logo.url}>
-          <span className={`text-2xl font-bold cursor-pointer ${config.colors.text}`}>
+          <span style={{ color: config.colors.text }} className="text-2xl font-bold cursor-pointer">
             {config.logo.text}
           </span>
         </Link>
@@ -18,7 +18,7 @@ export function Header({ config }: HeaderProps) {
         <nav className="hidden md:flex items-center space-x-6">
           {config.links.map((link) => (
             <Link key={link.text} href={link.url}>
-              <span className={`cursor-pointer hover:opacity-80 transition-opacity ${config.colors.text}`}>
+              <span style={{ color: config.colors.text }} className="cursor-pointer hover:opacity-80 transition-opacity">
                 {link.text}
               </span>
             </Link>

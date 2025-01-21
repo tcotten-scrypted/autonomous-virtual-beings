@@ -1,8 +1,8 @@
 {
   "header": {
     "logo": {
-      "text": "h011yw00d",
-      "url": "/"
+      "text": "@chad_onchain",
+      "url": "https://x.com/chad_onchain"
     },
     "links": [
       {
@@ -12,19 +12,20 @@
       {
         "text": "Contact",
         "url": "/contact"
+      },
+      {
+        "text": "AVB",
+        "url": "https://avb.gg"
       }
     ],
     "colors": {
-      "background": "bg-background/80",
-      "text": "text-foreground"
+      "background": "rgba(236, 254, 255, 0.8)",
+      "text": "rgba(8, 51, 68, 1.0)"
     }
   },
   "background": {
-    "type": "image",
-    "source": "https://images.pexels.com/photos/1252890/pexels-photo-1252890.jpeg",
-    "options": {
-      "opacity": 0.8,
-      "blur": "2px"
-    }
+    "type": "video",
+    "source": "/demo.mp4",
+    "options": {}
   }
 }
