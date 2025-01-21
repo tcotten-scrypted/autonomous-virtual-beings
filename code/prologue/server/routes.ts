@@ -1,14 +1,13 @@
-import type { Express } from "express";
-import { createServer, type Server } from "http";
+// routes.ts
 
-export function registerRoutes(app: Express): Server {
-  // Application routes here
-  // prefix all routes with /api
+// Define application route paths as constants
+export const ROUTES = {
+  HOME: '/',
+  ABOUT: '/about',
+  API_EXAMPLE: '/api/example',
+};
 
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok' });
-  });
+// Example usage in a component:
+// import { ROUTES } from './routes';
+// <Link href={ROUTES.HOME}>Home</Link>
 
-  const httpServer = createServer(app);
-  return httpServer;
-}

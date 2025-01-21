@@ -1,0 +1,30 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "types": [
+      "node",
+      "react",
+      "react-dom"
+    ],
+    "noEmit": true,
+    "isolatedModules": true
+  },
+  "include": [
+    "**/*",
+    "tailwind.config.ts",
+    "postcss.config.ts"
+  ],
+  "exclude": [
+    "../node_modules",
+    "../build",
+    "../dist",
+    "**/*.test.ts"
+  ]
+}
