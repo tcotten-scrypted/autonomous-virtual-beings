@@ -5,7 +5,7 @@ Test cycling script for the minimal Transformer with sliding window visualizatio
 import os
 import sys
 import time
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import unicodedata
 import re
 
@@ -29,14 +29,25 @@ def create_layout() -> Layout:
 
     # Split into main and side panel
     layout.split(
-        Layout(name="main", ratio=2),
-        Layout(name="side", ratio=1)
+        Layout(name="main", ratio=1),
+        Layout(name="side", ratio=2)
     )
 
     # Split side panel into stats and log
     layout["side"].split(
-        Layout(name="stats"),
+        Layout(name="stats", size=10),  # Increased height for stats panel to show all content
         Layout(name="log")
+    )
+
+    # Initialize main panel
+    layout["main"].update(
+        Panel(
+            Text("Initializing...", style="yellow"),
+            title="Generated Text",
+            border_style="blue",
+            box=box.ROUNDED,
+            height=15  # Fixed height for scrolling
+        )
     )
 
     return layout
@@ -44,18 +55,37 @@ def create_layout() -> Layout:
 def format_stats(
     total_tokens: int,
     window_sizes: List[int],
-    iterations: int
-) -> str:
+    iterations: int,
+    temperature: float = 0.8,
+    max_context: int = 64,
+    device: Optional[torch.device] = None
+) -> Text:
     """Format statistics for display."""
     avg_window = sum(window_sizes) / len(window_sizes) if window_sizes else 0
-    return (
-        f"[bold]Statistics[/bold]\n\n"
-        f"Iterations: {iterations}/1000\n"
-        f"Total Tokens: {total_tokens}\n"
-        f"Avg Window Size: {avg_window:.1f}\n"
-        f"Max Window: 64\n"
-        f"Current Window: {window_sizes[-1] if window_sizes else 0}"
-    )
+
+    # Create base text object
+    text = Text()
+
+    # Header
+    text.append("Statistics", style="bold magenta")
+    text.append("\n\n")
+
+    # Main stats with consistent styling
+    stats = [
+        ("Iterations", f"{iterations}/1000"),
+        ("Total Tokens", str(total_tokens)),
+        ("Avg Window Size", f"{avg_window:.1f}"),
+        ("Max Context", str(max_context)),
+        ("Current Window", str(window_sizes[-1] if window_sizes else 0)),
+        ("Temperature", f"{temperature:.2f}"),
+        ("Device", str(device if device else 'Not initialized'))
+    ]
+
+    for label, value in stats:
+        text.append(f"{label}: ", style="cyan")
+        text.append(f"{value}\n", style="green")
+
+    return text
 
 def format_log(log_entries: List[str]) -> str:
     """Format log entries for display."""
@@ -68,21 +98,21 @@ def is_printable(char: str) -> bool:
     return unicodedata.category(char)[0] not in {'C', 'Z'}
 
 def extract_val_loss(filename: str) -> float:
-    """
-    Extract validation loss from checkpoint filename, handling version suffixes.
-
-    Example filenames:
-    - transformer-epoch=99-val_loss=1.62.ckpt
-    - transformer-epoch=97-val_loss=1.64-v1.ckpt
-    """
+    """Extract validation loss from checkpoint filename."""
     try:
-        # Extract the value between val_loss= and the next non-digit character
         match = re.search(r'val_loss=(\d+\.\d+)', filename)
         if match:
             return float(match.group(1))
-        return float('inf')  # Return infinity for invalid files
+        return float('inf')
     except (ValueError, AttributeError):
-        return float('inf')  # Return infinity for invalid files
+        return float('inf')
+
+def format_text_with_breaks(text: str, width: int = 80) -> str:
+    """Format text with line breaks at specified width."""
+    result = []
+    for i in range(0, len(text), width):
+        result.append(text[i:i + width])
+    return '\n'.join(result)
 
 def main():
     try:
@@ -90,15 +120,22 @@ def main():
         checkpoint_dir = os.path.join(project_root, "checkpoints")
         checkpoints = [f for f in os.listdir(checkpoint_dir) if f.endswith('.ckpt')]
 
-        # Sort checkpoints by validation loss, handling version suffixes
+        # Sort checkpoints by validation loss
         latest_checkpoint = min(checkpoints, key=extract_val_loss)
         checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
 
         print(f"Loading checkpoint: {checkpoint_path}")
 
-        # Initialize model from checkpoint
+        # Initialize model and get device
         model = MinimalTransformer.load_from_checkpoint(checkpoint_path)
         model.eval()
+        device = model.device
+        print(f"Model initialized on device: {device}")
+
+        # Generation parameters
+        temperature = 0.8
+        max_context = 64
+        print(f"Generation parameters: temperature={temperature}, max_context={max_context}")
 
         # Initialize tracking variables
         current_text = "Hello"
@@ -106,6 +143,7 @@ def main():
         window_sizes: List[int] = []
         total_tokens = len(current_text)
         iterations = 0
+        interval_tokens = []
 
         # Create and configure layout
         layout = create_layout()
@@ -115,72 +153,90 @@ def main():
         with Live(layout, console=console, screen=True, refresh_per_second=4) as live:
             while iterations < 1000:
                 try:
-                    # Get input sequence (use last 63 tokens if longer)
-                    input_sequence = current_text[-63:] if len(current_text) > 63 else current_text
+                    # Get input sequence
+                    input_sequence = current_text[-(max_context-1):] if len(current_text) > (max_context-1) else current_text
                     window_sizes.append(len(input_sequence))
 
-                    # Convert to tensor on the correct device
-                    input_tokens = torch.tensor(
-                        [min(ord(c), 255) for c in input_sequence],
-                        dtype=torch.long,
-                        device=model.device
-                    ).unsqueeze(0)
-
-                    # Generate next token
-                    with torch.no_grad():
-                        logits = model(input_tokens)
-                        next_token_logits = logits[0, -1, :] / 0.8  # temperature=0.8
-                        probs = torch.softmax(next_token_logits, dim=-1)
-                        next_token = torch.multinomial(probs, num_samples=1)
-
-                    # Convert to character and append
-                    next_char = chr(min(next_token.item(), 255))
-                    if not is_printable(next_char):
-                        next_char = '�'  # Replace non-printable with replacement character
-
-                    current_text += next_char
-                    total_tokens += 1
-                    iterations += 1
-
-                    # Update log
-                    if iterations % 10 == 0:  # Log every 10th iteration
-                        log_entries.append(f"Iteration {iterations}: Added '{next_char}'")
-
-                    # Update display
-                    layout["main"].update(
-                        Panel(
-                            Text(current_text[-100:], overflow='ellipsis'),
-                            title="Generated Text (Last 100 chars)",
-                            border_style="blue",
-                            box=box.ROUNDED
-                        )
-                    )
-
+                    # Update statistics panel
                     layout["stats"].update(
                         Panel(
-                            format_stats(total_tokens, window_sizes, iterations),
+                            format_stats(
+                                total_tokens=total_tokens,
+                                window_sizes=window_sizes,
+                                iterations=iterations,
+                                temperature=temperature,
+                                max_context=max_context,
+                                device=device
+                            ),
                             title="Statistics",
                             border_style="green",
                             box=box.ROUNDED
                         )
                     )
 
-                    layout["log"].update(
+                    # Convert to tensor
+                    input_tokens = torch.tensor(
+                        [min(ord(c), 255) for c in input_sequence],
+                        dtype=torch.long,
+                        device=device
+                    ).unsqueeze(0)
+
+                    # Generate next token
+                    with torch.no_grad():
+                        logits = model(input_tokens)
+                        next_token_logits = logits[0, -1, :] / temperature
+                        probs = torch.softmax(next_token_logits, dim=-1)
+                        next_token = torch.multinomial(probs, num_samples=1)
+
+                    # Convert to character and append
+                    next_char = chr(min(next_token.item(), 255))
+                    if not is_printable(next_char):
+                        next_char = '�'
+
+                    interval_tokens.append(next_char)
+                    current_text += next_char
+                    total_tokens += 1
+                    iterations += 1
+
+                    # Update main panel with formatted text
+                    formatted_text = current_text
+                    layout["main"].update(
                         Panel(
-                            format_log(log_entries),
-                            title="Log",
-                            border_style="yellow",
-                            box=box.ROUNDED
+                            Text(formatted_text, overflow='fold', style="white"),
+                            title="Generated Text",
+                            border_style="blue",
+                            box=box.ROUNDED,
+                            height=10
                         )
                     )
 
-                    # Small delay to make the display readable
-                    time.sleep(0.1)
+                    # Update log every 10 iterations
+                    if iterations % 10 == 0:
+                        tokens_text = ''.join(interval_tokens)
+                        log_entries.append(
+                            f"Iterations {iterations-9}-{iterations}: '{tokens_text}'"
+                        )
+                        interval_tokens = []
 
+                        layout["log"].update(
+                            Panel(
+                                Text(format_log(log_entries), style="white"),
+                                title="Log",
+                                border_style="yellow",
+                                box=box.ROUNDED
+                            )
+                        )
+
+                    # Small delay to make the display readable
+                    
                 except Exception as e:
-                    log_entries.append(f"Error: {str(e)}")
+                    error_msg = f"Error: {str(e)}"
+                    log_entries.append(error_msg)
+                    print(error_msg)  # Also print to console for debugging
                     time.sleep(1)  # Pause briefly on error
                     continue
+                
+            input("Press any key to exit...")
 
     except KeyboardInterrupt:
         print("\nExiting gracefully...")
