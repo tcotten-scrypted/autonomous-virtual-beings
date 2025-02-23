@@ -122,11 +122,14 @@ def main():
     try:
         # Find latest checkpoint
         checkpoint_dir = os.path.join(project_root, "checkpoints")
-        checkpoints = [f for f in os.listdir(checkpoint_dir) if f.endswith('.ckpt')]
+        checkpoint_path = os.path.join(checkpoint_dir, "last.ckpt")
 
-        # Sort checkpoints by validation loss
-        latest_checkpoint = min(checkpoints, key=extract_val_loss)
-        checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
+        if not os.path.exists(checkpoint_path):
+            checkpoints = [f for f in os.listdir(checkpoint_dir) if f.endswith('.ckpt')]
+
+            # Sort checkpoints by validation loss
+            latest_checkpoint = min(checkpoints, key=extract_val_loss)
+            checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
 
         print(f"Loading checkpoint: {checkpoint_path}")
 
