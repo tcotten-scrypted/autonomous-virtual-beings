@@ -1,0 +1,25 @@
+[project]
+name = "fluctlight"
+version = "0.1.0"
+description = "A minimal Transformer implementation with Rotary Positional Embeddings (RoPE)"
+requires-python = ">=3.11"
+dependencies = [
+    "pytest>=8.3.4",
+    "pytorch-lightning>=2.5.0.post0",
+    "rich>=13.9.4",
+    "tensorboard>=2.19.0",
+    "torch>=2.6.0",
+    "trafilatura>=2.0.0",
+]
+
+[tool.setuptools]
+packages = ["fluctlight"]
+
+[[tool.uv.index]]
+explicit = true
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "platform_system == 'Linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "platform_system == 'Linux'" }]

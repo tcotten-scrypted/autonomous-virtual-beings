@@ -1,0 +1,52 @@
+# AI-Generated Content Attribution
+
+This project includes content generated with assistance from AI models. The AI-generated content includes:
+
+- Code structure and implementation
+- Documentation and diagrams
+- Test cases
+- Command-line interface design
+
+## Models Used
+
+1. Name: Replit Code Agent
+   - Type: Code Assistant AI
+   - Provider: Replit
+   - Usage: Primary development assistant for code implementation and debugging
+
+2. Name: ChatGPT
+   - Type: Language Model
+   - Provider: OpenAI
+   - Version: 4
+   - Usage: Initial architecture planning and documentation review
+
+## Usage Details
+
+The AI assistance was utilized for:
+- Project structure organization
+- Implementation of the Transformer architecture
+- Documentation generation
+- Test case design
+- CLI interface development
+- Code review and optimization
+
+## Human Review and Modification
+
+All AI-generated content has been reviewed and modified by human contributors to ensure:
+- Code quality and correctness
+- Documentation accuracy
+- Test coverage
+- Implementation efficiency
+
+## Training Data Attribution
+
+The model was trained on a randomized sample of tweets from @elonmusk's X.com account, processed and encoded as Base64 strings for training purposes.
+
+## Disclaimer
+
+While AI tools were used to assist in development, the final implementation decisions, code review, and project direction were managed by human developers. The project maintainers are responsible for the code quality and functionality.
+
+## Author
+
+Tim Cotten <tcotten@scryptedinc.com>
+Part of the AVB (Autonomous Virtual Beings) public repository
