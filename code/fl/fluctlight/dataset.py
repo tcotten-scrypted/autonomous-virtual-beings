@@ -6,8 +6,24 @@ import base64
 from pathlib import Path
 from typing import List, Tuple, Union, Optional
 
+import multiprocessing
 import torch
 from torch.utils.data import Dataset, DataLoader
+
+import multiprocessing
+
+def get_num_cpu_workers(reserved_workers=1):
+    """
+    Returns the number of recommended DataLoader workers based on:
+    `total_cpu_cores - reserved_workers`, ensuring at least one worker.
+    
+    The `reserved_workers` parameter ensures some CPU resources are left
+    available for system processes.
+
+    Returns:
+        int: Number of usable CPU workers.
+    """
+    return max(1, multiprocessing.cpu_count() - reserved_workers)
 
 def get_default_device() -> torch.device:
     """
@@ -65,8 +81,10 @@ class Base64Dataset(Dataset):
 def create_dataloader(
     dataset: Dataset,
     batch_size: int = 32,
-    shuffle: bool = True,
-    num_workers: int = 0
+    shuffle: bool = False,
+    num_workers: int = 0,
+    pin_memory: bool = False,
+    persistent_workers: bool = False
 ) -> DataLoader:
     """
     Create a DataLoader for the dataset.
@@ -75,7 +93,9 @@ def create_dataloader(
         dataset: The dataset to load
         batch_size: Batch size
         shuffle: Whether to shuffle the data
-        num_workers: Number of worker processes
+        num_workers: Number of worker processes,
+        pin_memory: Beneficial for GPUs
+        persistent_workers: Performance improvement in PyTorch 1.7+
 
     Returns:
         DataLoader instance
@@ -85,7 +105,9 @@ def create_dataloader(
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
-        collate_fn=collate_sequences
+        collate_fn=collate_sequences,
+        pin_memory=pin_memory,
+        persistent_workers=persistent_workers
     )
 
 def collate_sequences(batch: List[torch.Tensor]) -> torch.Tensor:
