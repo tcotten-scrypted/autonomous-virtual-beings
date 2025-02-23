@@ -11,6 +11,7 @@ for text generation, with configurable parameters for both processes.
 """
 
 import argparse
+import base64
 from pathlib import Path
 from typing import Optional
 
@@ -21,6 +22,37 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from .model import MinimalTransformer
 from .dataset import Base64Dataset, create_dataloader
 from .utils import generate_continuation
+
+def ascii_chunks(size=32):
+    """
+    Generates overlapping 32-byte chunks of the ASCII character set (0-255).
+    Wraps around at the end to form a cycle.
+    """
+    ascii_bytes = bytes(range(256))  # All byte values from 0 to 255
+    chunks = [ascii_bytes[i:i + size] for i in range(0, 256, size)]
+
+    # Ensure wrap-around by appending the first chunk at the end
+    chunks.append(ascii_bytes[:size])
+    return chunks
+
+# Many ASCII characters are not directly used in training data, so we need to
+# provide at least some training data for them much like human children learn
+# the order of the ABCs. This hopefully prevents mode collapse around Token 0
+def generate_seed_data():
+    """
+    Generates the cyclically mapped Base64 seed data.
+    Each line follows the format:
+        base64(32-byte chunk) \t base64(next 32-byte chunk) \n
+    """
+    chunks = ascii_chunks()
+    data = []
+    
+    for i in range(len(chunks) - 1):
+        left = base64.b64encode(chunks[i]).decode('utf-8')
+        right = base64.b64encode(chunks[i + 1]).decode('utf-8')
+        data.append(f"{left}\t{right}\n")
+
+    return data
 
 def train(
     train_file: str,
@@ -52,7 +84,7 @@ def train(
     output_path.mkdir(parents=True, exist_ok=True)
 
     # Prepare data
-    train_dataset = Base64Dataset(train_file)
+    train_dataset = Base64Dataset(train_file, prepend=generate_seed_data())
     val_dataset = Base64Dataset(val_file)
 
     train_loader = create_dataloader(train_dataset, batch_size=batch_size)

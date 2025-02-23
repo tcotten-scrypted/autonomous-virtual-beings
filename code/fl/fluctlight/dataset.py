@@ -41,7 +41,8 @@ class Base64Dataset(Dataset):
     def __init__(
         self,
         file_path: Union[str, Path],
-        device: Optional[torch.device] = None
+        device: Optional[torch.device] = None,
+        prepend: Optional[List[str]] = []
     ):
         """
         Initialize the dataset.
@@ -53,6 +54,13 @@ class Base64Dataset(Dataset):
         self.file_path = Path(file_path)
         self.data: List[str] = []
         self.device = device if device is not None else get_default_device()
+        
+        # Prepend optional training data, such as the ASCII cycle 
+        if prepend:
+            for line in prepend:
+                line = line.strip()
+                if line:
+                    self.data.append(line)
 
         # Load and decode data
         with open(self.file_path, 'r') as f:
