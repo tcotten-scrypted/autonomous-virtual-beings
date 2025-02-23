@@ -5,7 +5,7 @@ Test cycling script for the minimal Transformer with sliding window visualizatio
 import os
 import sys
 import time
-from typing import List, Tuple, Optional
+from typing import List, Optional
 import unicodedata
 import re
 
@@ -22,6 +22,7 @@ from rich.text import Text
 from rich import box
 
 from fluctlight.model import MinimalTransformer
+
 
 def create_layout() -> Layout:
     """Create the layout for the UI."""
@@ -52,6 +53,7 @@ def create_layout() -> Layout:
 
     return layout
 
+
 def format_stats(
     total_tokens: int,
     window_sizes: List[int],
@@ -63,14 +65,10 @@ def format_stats(
     """Format statistics for display."""
     avg_window = sum(window_sizes) / len(window_sizes) if window_sizes else 0
 
-    # Create base text object
     text = Text()
-
-    # Header
     text.append("Statistics", style="bold magenta")
     text.append("\n\n")
 
-    # Main stats with consistent styling
     stats = [
         ("Iterations", f"{iterations}/1000"),
         ("Total Tokens", str(total_tokens)),
@@ -87,15 +85,27 @@ def format_stats(
 
     return text
 
+
 def format_log(log_entries: List[str]) -> str:
     """Format log entries for display."""
     return "\n".join(log_entries[-10:])  # Show last 10 entries
 
-def is_printable(char: str) -> bool:
-    """Check if a character is printable."""
-    if not char:
-        return False
-    return unicodedata.category(char)[0] not in {'C', 'Z'}
+
+def format_for_display(raw_text: str) -> str:
+    """
+    Normalize the raw text and replace unprintable characters
+    (except newline, tab, and space) with a replacement.
+    """
+    normalized = unicodedata.normalize('NFC', raw_text)
+    result_chars = []
+    for c in normalized:
+        # Allow newline, tab, and space even if isprintable() returns False for them.
+        if c in "\n\t " or c.isprintable():
+            result_chars.append(c)
+        else:
+            result_chars.append('�')
+    return ''.join(result_chars)
+
 
 def extract_val_loss(filename: str) -> float:
     """Extract validation loss from checkpoint filename."""
@@ -107,12 +117,6 @@ def extract_val_loss(filename: str) -> float:
     except (ValueError, AttributeError):
         return float('inf')
 
-def format_text_with_breaks(text: str, width: int = 80) -> str:
-    """Format text with line breaks at specified width."""
-    result = []
-    for i in range(0, len(text), width):
-        result.append(text[i:i + width])
-    return '\n'.join(result)
 
 def main():
     try:
@@ -138,12 +142,13 @@ def main():
         print(f"Generation parameters: temperature={temperature}, max_context={max_context}")
 
         # Initialize tracking variables
-        current_text = "Hello"
+        # raw_text is used for token generation; display_text is computed for UI
+        raw_text = "Good morning."
         log_entries: List[str] = []
         window_sizes: List[int] = []
-        total_tokens = len(current_text)
+        total_tokens = len(raw_text)
         iterations = 0
-        interval_tokens = []
+        interval_tokens: List[str] = []
 
         # Create and configure layout
         layout = create_layout()
@@ -153,8 +158,8 @@ def main():
         with Live(layout, console=console, screen=True, refresh_per_second=4) as live:
             while iterations < 1000:
                 try:
-                    # Get input sequence
-                    input_sequence = current_text[-(max_context-1):] if len(current_text) > (max_context-1) else current_text
+                    # Use raw_text for token generation
+                    input_sequence = raw_text[-(max_context - 1):] if len(raw_text) > (max_context - 1) else raw_text
                     window_sizes.append(len(input_sequence))
 
                     # Update statistics panel
@@ -188,21 +193,20 @@ def main():
                         probs = torch.softmax(next_token_logits, dim=-1)
                         next_token = torch.multinomial(probs, num_samples=1)
 
-                    # Convert to character and append
+                    # Convert to character (do not filter for generation)
                     next_char = chr(min(next_token.item(), 255))
-                    if not is_printable(next_char):
-                        next_char = '�'
-
-                    interval_tokens.append(next_char)
-                    current_text += next_char
+                    # Append the new token to the raw text
+                    raw_text += next_char
                     total_tokens += 1
                     iterations += 1
+                    interval_tokens.append(next_char)
 
-                    # Update main panel with formatted text
-                    formatted_text = current_text
+                    # Compute display text from the raw text,
+                    # allowing line breaks and combining sequences
+                    display_text = format_for_display(raw_text)
                     layout["main"].update(
                         Panel(
-                            Text(formatted_text, overflow='fold', style="white"),
+                            Text(display_text, overflow='fold', style="white"),
                             title="Generated Text",
                             border_style="blue",
                             box=box.ROUNDED,
@@ -212,12 +216,16 @@ def main():
 
                     # Update log every 10 iterations
                     if iterations % 10 == 0:
-                        tokens_text = ''.join(interval_tokens)
-                        log_entries.append(
-                            f"Iterations {iterations-9}-{iterations}: '{tokens_text}'"
-                        )
-                        interval_tokens = []
+                        # Compute a display version of the latest interval tokens
+                        tokens_display = format_for_display(''.join(interval_tokens))
+                        # Create a lambda to map each character to its numeric (ord) value
+                        to_ids = lambda seq: ', '.join(str(ord(c)) for c in seq)
 
+                        log_entries.append(
+                            f"Iterations {iterations-9}-{iterations}: '{tokens_display}' [IDs: {to_ids(interval_tokens)}]"
+                        )
+                        
+                        interval_tokens = []
                         layout["log"].update(
                             Panel(
                                 Text(format_log(log_entries), style="white"),
@@ -227,21 +235,20 @@ def main():
                             )
                         )
 
-                    # Small delay to make the display readable
-                    
                 except Exception as e:
                     error_msg = f"Error: {str(e)}"
                     log_entries.append(error_msg)
                     print(error_msg)  # Also print to console for debugging
                     time.sleep(1)  # Pause briefly on error
                     continue
-                
+
             input("Press any key to exit...")
 
     except KeyboardInterrupt:
         print("\nExiting gracefully...")
     except Exception as e:
         print(f"\nFatal error: {str(e)}")
+
 
 if __name__ == "__main__":
     main()
