@@ -67,8 +67,11 @@ def generate_continuation(
     """
     model.eval()
 
-    # Convert input string to token tensor
-    input_tokens = torch.tensor([ord(c) for c in input_str], dtype=torch.long)
+    # Get the model's device
+    device = next(model.parameters()).device
+
+    # Convert input string to token tensor on the correct device
+    input_tokens = torch.tensor([ord(c) for c in input_str], dtype=torch.long, device=device)
     input_tokens = input_tokens.unsqueeze(0)  # Add batch dimension
 
     # Generate tokens autoregressively
@@ -87,7 +90,7 @@ def generate_continuation(
             if next_token.item() == 9:  # ASCII tab
                 break
 
-            # Append to sequence
+            # Append to sequence (ensure next_token is on the correct device)
             generated.append(next_token.item())
             input_tokens = torch.cat([input_tokens, next_token.unsqueeze(0)], dim=1)
 

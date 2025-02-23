@@ -26,21 +26,19 @@ from torch import nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
 
+def get_default_device() -> torch.device:
+    """
+    Get the optimal available device (Metal, CUDA, or CPU).
+    """
+    if torch.backends.mps.is_available():
+        return torch.device("mps")  # Apple Silicon GPU
+    elif torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
 class MinimalTransformer(pl.LightningModule):
     """
     A minimal Transformer implementation using Rotary Positional Embeddings (RoPE).
-
-    The model processes byte-level tokens (0-255) through a compact Transformer 
-    architecture. RoPE is applied to queries and keys in self-attention, providing
-    relative positional information without separate positional embeddings.
-
-    Args:
-        vocab_size: Size of vocabulary (default: 256 for byte-level)
-        d_model: Embedding dimension (default: 4)
-        n_heads: Number of attention heads (default: 2)
-        n_layers: Number of transformer layers (default: 2)
-        d_ff: Feed-forward dimension (default: 8)
-        learning_rate: Initial learning rate (default: 1e-3)
     """
 
     def __init__(
@@ -50,7 +48,8 @@ class MinimalTransformer(pl.LightningModule):
         n_heads: int = 2,
         n_layers: int = 2,
         d_ff: int = 8,
-        learning_rate: float = 1e-3
+        learning_rate: float = 1e-3,
+        device: Optional[torch.device] = None
     ):
         super().__init__()
 
@@ -60,31 +59,42 @@ class MinimalTransformer(pl.LightningModule):
         self.head_dim = d_model // n_heads
         self.learning_rate = learning_rate
 
-        # Token embedding layer (byte-level tokens to d_model dimensions)
+        # Set device (use passed device or detect optimal device)
+        self._device = device if device is not None else get_default_device()
+
+        # Token embedding layer
         self.token_embed = nn.Embedding(vocab_size, d_model)
 
-        # Transformer layers with RoPE attention
+        # Transformer layers
         self.layers = nn.ModuleList([
             nn.ModuleDict({
-                "Wq": nn.Linear(d_model, d_model),  # Query projection
-                "Wk": nn.Linear(d_model, d_model),  # Key projection
-                "Wv": nn.Linear(d_model, d_model),  # Value projection
-                "Wo": nn.Linear(d_model, d_model),  # Output projection
-                "ff_in": nn.Linear(d_model, d_ff),  # FF network in
-                "ff_out": nn.Linear(d_ff, d_model), # FF network out
-                "ln1": nn.LayerNorm(d_model),      # First layer norm
-                "ln2": nn.LayerNorm(d_model)       # Second layer norm
+                "Wq": nn.Linear(d_model, d_model),
+                "Wk": nn.Linear(d_model, d_model),
+                "Wv": nn.Linear(d_model, d_model),
+                "Wo": nn.Linear(d_model, d_model),
+                "ff_in": nn.Linear(d_model, d_ff),
+                "ff_out": nn.Linear(d_ff, d_model),
+                "ln1": nn.LayerNorm(d_model),
+                "ln2": nn.LayerNorm(d_model)
             }) for _ in range(n_layers)
         ])
 
-        # Output projection to vocabulary logits
+        # Output projection
         self.output_proj = nn.Linear(d_model, vocab_size)
 
-        # Tab token ID (ASCII 9) used for sequence padding/masking
+        # Tab token ID (ASCII 9)
         self.tab_token_id = 9
 
-        # Save hyperparameters for checkpointing
-        self.save_hyperparameters()
+        # Move model to detected device
+        self.to(self._device)
+
+        # Save hyperparameters
+        self.save_hyperparameters(ignore=['device'])
+
+    @property
+    def device(self) -> torch.device:
+        """Get the device the model is on."""
+        return self._device
 
     def _apply_rope(
         self, 
@@ -92,38 +102,22 @@ class MinimalTransformer(pl.LightningModule):
         k: torch.Tensor, 
         seq_len: int
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Apply Rotary Positional Embedding to query and key tensors.
-
-        RoPE provides relative positional information by rotating vector pairs
-        in q and k tensors based on their position in the sequence. This allows
-        the attention mechanism to consider token positions without separate
-        positional embeddings.
-
-        Args:
-            q: Query tensor [batch, heads, seq_len, head_dim]
-            k: Key tensor [batch, heads, seq_len, head_dim]
-            seq_len: Length of input sequence
-
-        Returns:
-            Tuple of rotated (q, k) tensors with positional information
-        """
-
+        """Apply Rotary Positional Embedding."""
         # Generate position-dependent rotation angles
-        pos = torch.arange(seq_len, device=q.device, dtype=torch.float).unsqueeze(1)
-        dim_idx = torch.arange(self.head_dim // 2, device=q.device, dtype=torch.float)
+        pos = torch.arange(seq_len, device=self.device, dtype=torch.float).unsqueeze(1)
+        dim_idx = torch.arange(self.head_dim // 2, device=self.device, dtype=torch.float)
         angle_rates = 1.0 / (10000 ** (2 * dim_idx / self.d_model))
         angles = pos * angle_rates
 
         # Prepare rotation matrices
-        cos = torch.cos(angles).unsqueeze(0).unsqueeze(0)  # [1, 1, L, head_dim/2]
-        sin = torch.sin(angles).unsqueeze(0).unsqueeze(0)  # [1, 1, L, head_dim/2]
+        cos = torch.cos(angles).unsqueeze(0).unsqueeze(0)
+        sin = torch.sin(angles).unsqueeze(0).unsqueeze(0)
 
-        # Split into even and odd dimensions for rotation
+        # Split into even and odd dimensions
         q_even, q_odd = q[..., 0::2], q[..., 1::2]
         k_even, k_odd = k[..., 0::2], k[..., 1::2]
 
-        # Apply rotation using sin/cos
+        # Apply rotation
         q_rotated_even = q_even * cos - q_odd * sin
         q_rotated_odd = q_even * sin + q_odd * cos
         k_rotated_even = k_even * cos - k_odd * sin
@@ -136,27 +130,13 @@ class MinimalTransformer(pl.LightningModule):
         return q, k
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through the Transformer.
-
-        The input sequence is processed through:
-        1. Token embedding
-        2. Multiple transformer layers, each with:
-           - Multi-head self-attention with RoPE
-           - Feed-forward network
-           - Layer normalization and residual connections
-        3. Final output projection to vocabulary logits
-
-        Args:
-            x: Input tensor of token indices [batch_size, seq_len]
-
-        Returns:
-            Logits tensor [batch_size, seq_len, vocab_size]
-        """
+        """Forward pass through the Transformer."""
+        # Ensure input is on correct device
+        x = x.to(self.device)
         B, seq_len = x.shape
 
         # Token embedding
-        h = self.token_embed(x)  # [B, seq_len, d_model]
+        h = self.token_embed(x)
 
         # Process through transformer layers
         for layer in self.layers:
@@ -181,7 +161,7 @@ class MinimalTransformer(pl.LightningModule):
 
             # Apply causal mask
             mask = torch.triu(
-                torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool),
+                torch.ones(seq_len, seq_len, device=self.device, dtype=torch.bool),
                 diagonal=1
             )
             attn_scores = attn_scores.masked_fill(mask, float('-inf'))
@@ -194,11 +174,11 @@ class MinimalTransformer(pl.LightningModule):
             attn_out = attn_out.permute(0, 2, 1, 3).reshape(B, seq_len, self.d_model)
             attn_out = layer["Wo"](attn_out)
 
-            # First residual connection and layer norm
+            # Residual connection and layer norm
             h = h + attn_out
             h = layer["ln1"](h)
 
-            # Feed-forward network with ReLU
+            # Feed-forward network
             ff_out = layer["ff_out"](F.relu(layer["ff_in"](h)))
 
             # Second residual connection and layer norm
@@ -210,29 +190,25 @@ class MinimalTransformer(pl.LightningModule):
         return logits
 
     def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
-        """
-        Training step logic with masking for tab-delimited input.
-
-        Handles sequence padding and masking using tab character (ASCII 9)
-        for proper loss calculation.
-        """
-        # Handle batch format
+        """Training step with device handling."""
+        # Move batch to correct device and handle format
         if isinstance(batch, (tuple, list)):
             seq, in_len = batch
+            seq = seq.to(self.device)
         else:
-            seq = batch
+            seq = batch.to(self.device)
 
-        # Prepare input and target (shifted by 1)
+        # Prepare input and target
         inp = seq[:, :-1]
         target = seq[:, 1:]
 
-        # Create ignore mask for input tokens before tab
+        # Create ignore mask
         B, T = target.shape
         tab_positions = (seq == self.tab_token_id).int().argmax(dim=1)
         pos_idx = torch.arange(T, device=self.device).unsqueeze(0).expand(B, -1)
         ignore_mask = pos_idx < tab_positions.unsqueeze(1)
 
-        # Forward pass and compute masked loss
+        # Forward pass and loss computation
         logits = self(inp)
         target_masked = target.masked_fill(ignore_mask, -100)
         loss = F.cross_entropy(
@@ -245,23 +221,25 @@ class MinimalTransformer(pl.LightningModule):
         return loss
 
     def validation_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
-        """
-        Validation step with same masking logic as training.
-        """
-        # Similar to training step
+        """Validation step with device handling."""
+        # Move batch to correct device and handle format
         if isinstance(batch, (tuple, list)):
             seq, in_len = batch
+            seq = seq.to(self.device)
         else:
-            seq = batch
+            seq = batch.to(self.device)
 
+        # Prepare input and target
         inp = seq[:, :-1]
         target = seq[:, 1:]
 
+        # Create ignore mask
         B, T = target.shape
         tab_positions = (seq == self.tab_token_id).int().argmax(dim=1)
         pos_idx = torch.arange(T, device=self.device).unsqueeze(0).expand(B, -1)
         ignore_mask = pos_idx < tab_positions.unsqueeze(1)
 
+        # Forward pass and loss computation
         logits = self(inp)
         target_masked = target.masked_fill(ignore_mask, -100)
         val_loss = F.cross_entropy(
@@ -274,5 +252,5 @@ class MinimalTransformer(pl.LightningModule):
         return val_loss
 
     def configure_optimizers(self):
-        """Configure optimizer with learning rate."""
+        """Configure optimizer."""
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
