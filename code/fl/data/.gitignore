@@ -3,5 +3,6 @@
 
 # Except for this .gitignore file
 !.gitignore
-# And the README
 !README.md
+!sample-train.txt
+!sample-val.txt

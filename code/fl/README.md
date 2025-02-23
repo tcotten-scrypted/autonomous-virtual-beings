@@ -51,7 +51,7 @@ uv pip install -r dev-requirements.txt
 
 2. Train the model:
 ```bash
-python -m fluctlight.cli train --train-file data/train.txt --val-file data/val.txt --output-dir checkpoints
+python -m fluctlight.cli train --train-file data/sample-train.txt --val-file data/sample-val.txt --output-dir checkpoints
 ```
 
 3. Generate text:
