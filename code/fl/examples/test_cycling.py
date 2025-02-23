@@ -63,7 +63,7 @@ def is_printable(char: str) -> bool:
 def main():
     try:
         # Initialize model from best checkpoint
-        checkpoint_path = "checkpoints/transformer-epoch=59-val_loss=1.78.ckpt"
+        checkpoint_path = "checkpoints/last.ckpt"
         model = MinimalTransformer.load_from_checkpoint(checkpoint_path)
         model.eval()
 

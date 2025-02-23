@@ -56,7 +56,7 @@ python -m fluctlight.cli train --train-file data/sample-train.txt --val-file dat
 
 3. Generate text:
 ```bash
-python -m fluctlight.cli generate --checkpoint checkpoints/model-latest.ckpt --input-text "Hello"
+python -m fluctlight.cli generate --checkpoint checkpoints/last.ckpt --input-text "Hello"
 ```
 
 4. Run the interactive cycling demo:

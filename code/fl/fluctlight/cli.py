@@ -69,7 +69,8 @@ def train(
         dirpath=output_dir,
         filename='transformer-{epoch:02d}-{val_loss:.2f}',
         save_top_k=3,
-        monitor='val_loss'
+        monitor='val_loss',
+	save_last=True
     )
 
     trainer = pl.Trainer(
