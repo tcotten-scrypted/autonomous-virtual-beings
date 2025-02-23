@@ -2,9 +2,16 @@
 Test cycling script for the minimal Transformer with sliding window visualization.
 """
 
+import os
+import sys
 import time
 from typing import List, Tuple
 import unicodedata
+import re
+
+# Add project root to Python path to allow local imports
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(project_root)
 
 import torch
 from rich.console import Console
@@ -60,10 +67,36 @@ def is_printable(char: str) -> bool:
         return False
     return unicodedata.category(char)[0] not in {'C', 'Z'}
 
+def extract_val_loss(filename: str) -> float:
+    """
+    Extract validation loss from checkpoint filename, handling version suffixes.
+
+    Example filenames:
+    - transformer-epoch=99-val_loss=1.62.ckpt
+    - transformer-epoch=97-val_loss=1.64-v1.ckpt
+    """
+    try:
+        # Extract the value between val_loss= and the next non-digit character
+        match = re.search(r'val_loss=(\d+\.\d+)', filename)
+        if match:
+            return float(match.group(1))
+        return float('inf')  # Return infinity for invalid files
+    except (ValueError, AttributeError):
+        return float('inf')  # Return infinity for invalid files
+
 def main():
     try:
-        # Initialize model from best checkpoint
-        checkpoint_path = "checkpoints/last.ckpt"
+        # Find latest checkpoint
+        checkpoint_dir = os.path.join(project_root, "checkpoints")
+        checkpoints = [f for f in os.listdir(checkpoint_dir) if f.endswith('.ckpt')]
+
+        # Sort checkpoints by validation loss, handling version suffixes
+        latest_checkpoint = min(checkpoints, key=extract_val_loss)
+        checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
+
+        print(f"Loading checkpoint: {checkpoint_path}")
+
+        # Initialize model from checkpoint
         model = MinimalTransformer.load_from_checkpoint(checkpoint_path)
         model.eval()
 
@@ -86,7 +119,7 @@ def main():
                     input_sequence = current_text[-63:] if len(current_text) > 63 else current_text
                     window_sizes.append(len(input_sequence))
 
-                    # Convert to tensor, ensuring values are within valid range
+                    # Convert to tensor on the correct device
                     input_tokens = torch.tensor(
                         [min(ord(c), 255) for c in input_sequence],
                         dtype=torch.long,
