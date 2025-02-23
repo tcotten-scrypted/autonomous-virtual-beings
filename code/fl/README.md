@@ -30,15 +30,23 @@ The Fluctlight model uses the following configuration:
 
 See the architecture diagrams in `docs/` for detailed visualization.
 
-## Training Data
-
-The model was trained on a dataset of tweets from @elonmusk's X.com account, processed and encoded as Base64 strings. The training data provides a diverse set of natural language examples for the model to learn from.
-
 ## Setup and Usage
 
-1. Install dependencies:
+1. Install UV & Set Up Environment:
 ```bash
-pip install -r requirements.txt
+# Install UV if you haven't already
+https://docs.astral.sh/uv/getting-started/installation/
+
+# Create virtual environment and activate it
+uv venv && source .venv/bin/activate  # Unix-like
+# or
+uv venv && .venv\Scripts\activate  # Windows
+
+# Install dependencies with UV (faster than pip alone)
+uv pip install -r requirements.txt
+
+# For development (optional)
+uv pip install -r dev-requirements.txt
 ```
 
 2. Train the model:

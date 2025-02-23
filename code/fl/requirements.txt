@@ -1,0 +1,5 @@
+torch
+pytorch-lightning
+rich
+tensorboard
+trafilatura
