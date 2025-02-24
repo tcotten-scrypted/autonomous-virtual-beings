@@ -89,9 +89,6 @@ class MinimalTransformer(pl.LightningModule):
         # Output projection
         self.output_proj = nn.Linear(d_model, vocab_size)
 
-        # Tab token ID (ASCII 9)
-        self.tab_token_id = 9
-
         # Move model to detected device
         self.to(self._device)
 
