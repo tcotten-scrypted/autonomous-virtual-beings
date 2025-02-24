@@ -138,6 +138,11 @@ class MinimalTransformer(pl.LightningModule):
         """Forward pass through the Transformer."""
         # Ensure input is on correct device
         x = x.to(self.device)
+        
+        # Enforce context window limit
+        if x.shape[1] > 64:
+            x = x[:, -64:]  # Take only the last 64 tokens
+        
         B, seq_len = x.shape
 
         # Token embedding
