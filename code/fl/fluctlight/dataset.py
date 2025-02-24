@@ -12,6 +12,8 @@ from torch.utils.data import Dataset, DataLoader
 
 import multiprocessing
 
+from fluctlight.utils import decode_base64_pair
+
 def get_num_cpu_workers(reserved_workers=1):
     """
     Returns the number of recommended DataLoader workers based on:
@@ -58,33 +60,36 @@ class Base64Dataset(Dataset):
         # Prepend optional training data, such as the ASCII cycle 
         if prepend:
             for line in prepend:
-                line = line.strip()
-                if line:
-                    self.data.append(line)
+                a, b = decode_base64_pair(line)
+                self.data.append(self.create_tensor_pair(a, b))
 
         # Load and decode data
         with open(self.file_path, 'r') as f:
             for line in f:
-                line = line.strip()
-                if line:  # Skip empty lines
-                    self.data.append(line)
+                a, b = decode_base64_pair(line)
+                self.data.append(self.create_tensor_pair(a, b))
+                    
+    def convert_to_tensor(self, line):
+        return torch.tensor([b for b in line], dtype=torch.long, device=self.device)
+    
+    def create_tensor_pair(self, a, b):
+        return (
+            self.convert_to_tensor(a),
+            self.convert_to_tensor(b)
+        )
 
     def __len__(self) -> int:
         return len(self.data)
 
-    def __getitem__(self, idx: int) -> torch.Tensor:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Get a single example from the dataset.
 
         Returns:
             Tensor of byte values representing the sequence
         """
-        # Decode Base64 string
-        encoded = self.data[idx]
-        decoded = base64.b64decode(encoded)
 
-        # Convert bytes to tensor on correct device
-        return torch.tensor([b for b in decoded], dtype=torch.long, device=self.device)
+        return self.data[idx]
 
 def create_dataloader(
     dataset: Dataset,
@@ -118,25 +123,30 @@ def create_dataloader(
         persistent_workers=persistent_workers
     )
 
-def collate_sequences(batch: List[torch.Tensor]) -> torch.Tensor:
+def collate_sequences(batch: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Collate function for padding sequences to same length.
+    Collate function for padding input and target sequences to the same length.
 
     Args:
-        batch: List of sequence tensors
+        batch: List of (input_tensor, target_tensor) tuples.
 
     Returns:
-        Padded tensor of shape [batch_size, max_seq_len]
+        Tuple of padded tensors (inputs, targets) with shape [batch_size, max_seq_len].
     """
+    inputs, targets = zip(*batch)  # Separate input and target sequences
+
     # Find max length in batch
-    max_len = max(seq.size(0) for seq in batch)
+    max_len = max(seq.size(0) for seq in inputs + targets)  # Consider both inputs and targets
 
-    # Get device from first tensor in batch
-    device = batch[0].device if batch else torch.device('cpu')
+    # Get device from the first tensor
+    device = inputs[0].device if inputs else torch.device('cpu')
 
-    # Pad sequences on the correct device
-    padded = torch.full((len(batch), max_len), 0, dtype=torch.long, device=device)
-    for i, seq in enumerate(batch):
-        padded[i, :seq.size(0)] = seq
+    # Create padding tensors
+    input_padded = torch.full((len(inputs), max_len), 0, dtype=torch.long, device=device)
+    target_padded = torch.full((len(targets), max_len), 0, dtype=torch.long, device=device)
 
-    return padded
+    for i, (inp, tgt) in enumerate(zip(inputs, targets)):
+        input_padded[i, :inp.size(0)] = inp
+        target_padded[i, :tgt.size(0)] = tgt
+
+    return input_padded, target_padded

@@ -25,8 +25,10 @@ def decode_base64_pair(encoded: str) -> Tuple[str, str]:
     Returns:
         Tuple of (input_string, output_string)
     """
-    decoded = base64.b64decode(encoded).decode('ascii')
-    input_str, output_str = decoded.split('\t')
+    input_str, output_str = encoded.split('\t')
+    input_str = base64.b64decode(input_str)
+    output_str = base64.b64decode(output_str)
+    
     return input_str, output_str
 
 def encode_base64_pair(input_str: str, output_str: str) -> str:

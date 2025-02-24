@@ -137,11 +137,13 @@ def main():
         model = MinimalTransformer.load_from_checkpoint(checkpoint_path)
         model.eval()
         device = model.device
+        
         print(f"Model initialized on device: {device}")
 
         # Generation parameters
         temperature = 0.8
         max_context = 64
+        top_k = 128
         print(f"Generation parameters: temperature={temperature}, max_context={max_context}")
 
         # Initialize tracking variables
@@ -189,12 +191,18 @@ def main():
                         device=device
                     ).unsqueeze(0)
 
-                    # Generate next token
+                    # Generate next token using temp and top_k=10
                     with torch.no_grad():
-                        logits = model(input_tokens)
-                        next_token_logits = logits[0, -1, :] / temperature
-                        probs = torch.softmax(next_token_logits, dim=-1)
-                        next_token = torch.multinomial(probs, num_samples=1)
+                        logits = model(input_tokens)      
+                           
+                        next_token_logits = logits[0, -1, :]
+                        next_token_logits = next_token_logits / temperature
+
+                        top_values, top_indices = torch.topk(next_token_logits, top_k)
+                        top_probs = torch.softmax(top_values, dim=-1)
+    
+                        next_token_id = torch.multinomial(top_probs, num_samples=1)
+                        next_token = top_indices[next_token_id]
 
                     # Convert to character (do not filter for generation)
                     next_char = chr(min(next_token.item(), 255))
