@@ -512,3 +512,23 @@ When training the model, you’d decode the Base64 to get the actual string. Aft
 With this setup, you have a complete minimal Transformer implementation and the knowledge to train and expand it. You can experiment by training the model on the provided sample data (after decoding it) and observing how quickly it learns the mappings. Then, try the progressive expansion: for instance, double the embedding size to 8 and see if you can reuse the tiny model’s weights to initialize a slightly larger model (you’d have to write some code to transplant weights). This can validate the concept of unfolding.
 
 Even without expansion, this minimal Transformer is a powerful demonstration: it’s a fully working sequence transducer in under 3K parameters. By carefully designing the experiment (small data, simple task), it can reach near-perfect accuracy, underscoring that even the mighty Transformer architecture can be distilled to a very basic form and still function. Have fun with this tiny Transformer!  ￼ ￼
+
+### Why We Do Not Use `nn.TransformerEncoderLayer`
+
+While `nn.TransformerEncoderLayer` provides a cleaner API, we **intentionally avoid it** due to the following reasons:
+
+1. **Weight Mirroring for Origami Expansion**  
+   - Our future "Origami" expansion scheme requires direct control over weight matrices to enable **mirroring and reflection** across axes.  
+   - `nn.TransformerEncoderLayer` encapsulates weights, making **precise control and structured expansion difficult**.
+
+2. **Explicit Control Over QKV and FFN Weights**  
+   - This model manually defines **Wq, Wk, Wv, Wo, ff_in, and ff_out**, allowing **fine-grained weight manipulation**.  
+   - `nn.TransformerEncoderLayer` abstracts these operations, making **custom weight transformations impractical**.
+
+3. **Integration of Rotary Positional Embeddings (RoPE)**  
+   - RoPE requires **modifying Q and K before attention computation**.  
+   - `nn.TransformerEncoderLayer` does not natively support RoPE, requiring unnecessary workarounds to inject it.
+
+### Conclusion
+By keeping `nn.ModuleDict()`, we **preserve full control over attention and feed-forward components**, ensuring smooth compatibility with **Origami-based model expansion** in the future.
+
