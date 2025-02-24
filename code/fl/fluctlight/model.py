@@ -193,27 +193,17 @@ class MinimalTransformer(pl.LightningModule):
         """Training step with device handling."""
         # Move batch to correct device and handle format
         if isinstance(batch, (tuple, list)):
-            seq, in_len = batch
-            seq = seq.to(self.device)
+            input_seq, target_seq = batch  # Correctly unpack input and target
+            input_seq = input_seq.to(self.device)
+            target_seq = target_seq.to(self.device)
         else:
-            seq = batch.to(self.device)
-
-        # Prepare input and target
-        inp = seq[:, :-1]
-        target = seq[:, 1:]
-
-        # Create ignore mask
-        B, T = target.shape
-        tab_positions = (seq == self.tab_token_id).int().argmax(dim=1)
-        pos_idx = torch.arange(T, device=self.device).unsqueeze(0).expand(B, -1)
-        ignore_mask = pos_idx < tab_positions.unsqueeze(1)
+            raise ValueError("Expected tuple of (input, target)")
 
         # Forward pass and loss computation
-        logits = self(inp)
-        target_masked = target.masked_fill(ignore_mask, -100)
+        logits = self(input_seq)
         loss = F.cross_entropy(
             logits.view(-1, self.vocab_size),
-            target_masked.reshape(-1),
+            target_seq.view(-1),
             ignore_index=-100
         )
 
@@ -224,27 +214,17 @@ class MinimalTransformer(pl.LightningModule):
         """Validation step with device handling."""
         # Move batch to correct device and handle format
         if isinstance(batch, (tuple, list)):
-            seq, in_len = batch
-            seq = seq.to(self.device)
+            input_seq, target_seq = batch  # Correctly unpack input and target
+            input_seq = input_seq.to(self.device)
+            target_seq = target_seq.to(self.device)
         else:
-            seq = batch.to(self.device)
-
-        # Prepare input and target
-        inp = seq[:, :-1]
-        target = seq[:, 1:]
-
-        # Create ignore mask
-        B, T = target.shape
-        tab_positions = (seq == self.tab_token_id).int().argmax(dim=1)
-        pos_idx = torch.arange(T, device=self.device).unsqueeze(0).expand(B, -1)
-        ignore_mask = pos_idx < tab_positions.unsqueeze(1)
+            raise ValueError("Expected tuple of (input, target)")
 
         # Forward pass and loss computation
-        logits = self(inp)
-        target_masked = target.masked_fill(ignore_mask, -100)
+        logits = self(input_seq)
         val_loss = F.cross_entropy(
             logits.view(-1, self.vocab_size),
-            target_masked.reshape(-1),
+            target_seq.view(-1),
             ignore_index=-100
         )
 
