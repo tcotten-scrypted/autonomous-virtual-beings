@@ -129,8 +129,9 @@ def update_display_text(display_text, raw_text):
     
     type = is_utf8_start_byte(id)
     if type == 0:
-        # ASCII character - replace ALL previous placeholders
-        while display_text.endswith('￭'):
+        # ASCII character
+        # Replace ALL previous placeholders
+        while '￭' in display_text[-4:]:  # Only check last few chars
             display_text = display_text[:-1] + '�'
         if id < 32 and c not in {'\n', '\t', ' '}:
             display_text += '�'
@@ -148,10 +149,8 @@ def update_display_text(display_text, raw_text):
         pos = len(raw_text) - 1
         continuation_count = 0
         
-        # Count existing placeholders
-        placeholder_count = 0
-        while display_text.endswith('￭', -placeholder_count-1):
-            placeholder_count += 1
+        # Count placeholders in last few characters (max UTF-8 is 4 bytes)
+        placeholder_count = display_text[-4:].count('￭')
         
         # Collect up to 3 previous bytes
         while pos >= 0 and continuation_count < 3:
