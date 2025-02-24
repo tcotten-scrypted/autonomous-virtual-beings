@@ -53,7 +53,6 @@ def create_layout() -> Layout:
 
     return layout
 
-
 def format_stats(
     total_tokens: int,
     window_sizes: List[int],
@@ -66,8 +65,6 @@ def format_stats(
     avg_window = sum(window_sizes) / len(window_sizes) if window_sizes else 0
 
     text = Text()
-    text.append("Statistics", style="bold magenta")
-    text.append("\n\n")
 
     stats = [
         ("Iterations", f"{iterations}/1000"),
@@ -92,16 +89,114 @@ def format_log(log_entries: List[str]) -> str:
 
 def format_for_display(raw_text: str) -> str:
     """
-    Ensures the text is safely printable by replacing control characters with '<?>'
-    while preserving spaces, tabs, and newlines.
+    Ensures the text is safely printable while preserving Unicode integrity.
 
-    - Avoids slow utf-8 decoding.
-    - Keeps formatting responsive in Rich UI.
-    - Retains whitespace characters (\t, \n, and spaces) for readability.
+    - Decodes UTF-8 properly before filtering.
+    - Replaces control characters with '�' (U+FFFD).
+    - Retains valid multi-byte Unicode characters.
+    - Keeps spaces, tabs, and newlines.
     """
+    try:
+        # Ensure proper UTF-8 decoding before character processing
+        decoded_text = raw_text.encode('utf-8', 'replace').decode('utf-8', 'replace')
+    except UnicodeDecodeError:
+        # If there's an issue, fail gracefully and replace invalid sequences
+        decoded_text = ''.join(c if ord(c) < 128 else '�' for c in raw_text)
+
     return ''.join(
         c if c in {' ', '\t', '\n'} or unicodedata.category(c)[0] != 'C' else '�'
-        for c in raw_text)
+        for c in decoded_text
+    )
+
+def is_utf8_start_byte(byte):
+    """Returns the expected length of a UTF-8 sequence starting with this byte."""
+    if byte & 0b10000000 == 0b00000000:  # ASCII
+        return 0
+    elif byte & 0b11100000 == 0b11000000:  # Start of 2-byte sequence
+        return 2
+    elif byte & 0b11110000 == 0b11100000:  # Start of 3-byte sequence
+        return 3
+    elif byte & 0b11111000 == 0b11110000:  # Start of 4-byte sequence
+        return 4
+    elif byte & 0b11000000 == 0b10000000:  # Continuation byte
+        return 1
+    else:
+        return -1  # Invalid byte
+
+def update_display_text(display_text, raw_text):
+    c = raw_text[-1]
+    id = ord(c)
+    
+    type = is_utf8_start_byte(id)
+    if type == 0:
+        # ASCII character - replace ALL previous placeholders
+        while display_text.endswith('￭'):
+            display_text = display_text[:-1] + '�'
+        if id < 32 and c not in {'\n', '\t', ' '}:
+            display_text += '�'
+        else:
+            display_text += c
+    elif type >= 2:
+        # Start of multi-byte sequence
+        # If there was a previous placeholder, it's now invalid
+        if display_text.endswith('￭'):
+            display_text = display_text[:-1] + '�'
+        display_text += '￭'
+    else:
+        # Continuation byte or invalid byte
+        sequence = []
+        pos = len(raw_text) - 1
+        continuation_count = 0
+        
+        # Count existing placeholders
+        placeholder_count = 0
+        while display_text.endswith('￭', -placeholder_count-1):
+            placeholder_count += 1
+        
+        # Collect up to 3 previous bytes
+        while pos >= 0 and continuation_count < 3:
+            current_byte = ord(raw_text[pos])
+            sequence.insert(0, current_byte)
+            
+            start_type = is_utf8_start_byte(current_byte)
+            if start_type >= 2:
+                # Found a start byte
+                if len(sequence) == start_type:
+                    try:
+                        char = bytes(sequence).decode('utf-8')
+                        # Replace exact number of placeholders
+                        if placeholder_count == len(sequence) - 1:
+                            display_text = display_text[:-placeholder_count] + char
+                        else:
+                            # Wrong number of placeholders - replace all with �
+                            display_text = display_text[:-placeholder_count] if placeholder_count else display_text
+                            display_text += '�' * len(sequence)
+                        break
+                    except UnicodeDecodeError:
+                        # Invalid sequence - replace all placeholders
+                        display_text = display_text[:-placeholder_count] if placeholder_count else display_text
+                        display_text += '�' * len(sequence)
+                        break
+                else:
+                    # Wrong length - replace all placeholders
+                    display_text = display_text[:-placeholder_count] if placeholder_count else display_text
+                    display_text += '�' * (len(sequence))
+                    break
+            elif start_type == 1:
+                continuation_count += 1
+            else:
+                # Found ASCII - replace all placeholders
+                display_text = display_text[:-placeholder_count] if placeholder_count else display_text
+                display_text += '�' * (len(sequence))
+                break
+            
+            pos -= 1
+        else:
+            # No valid start byte - replace all placeholders
+            display_text = display_text[:-placeholder_count] if placeholder_count else display_text
+            display_text += '�'
+            
+    return display_text
 
 def extract_val_loss(filename: str) -> float:
     """Extract validation loss from checkpoint filename."""
@@ -145,6 +240,8 @@ def main():
         # Initialize tracking variables
         # raw_text is used for token generation; display_text is computed for UI
         raw_text = "gm 😊"
+        display_text = str(raw_text)
+        
         log_entries: List[str] = []
         window_sizes: List[int] = []
         total_tokens = len(raw_text)
@@ -210,7 +307,7 @@ def main():
 
                     # Compute display text from the raw text,
                     # allowing line breaks and combining sequences
-                    display_text = format_for_display(raw_text)
+                    display_text = update_display_text(display_text,raw_text)
                     layout["main"].update(
                         Panel(
                             Text(display_text, overflow='fold', style="white"),
