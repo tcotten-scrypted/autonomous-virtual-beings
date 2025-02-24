@@ -176,14 +176,11 @@ class MinimalTransformer(pl.LightningModule):
 
             # Residual connection and layer norm
             h = h + attn_out
-            h = layer["ln1"](h)
-
-            # Feed-forward network
-            ff_out = layer["ff_out"](F.relu(layer["ff_in"](h)))
-
-            # Second residual connection and layer norm
-            h = h + ff_out
-            h = layer["ln2"](h)
+            
+            # Feed-forward with second layer norm
+            ff_input = layer["ln2"](h)  # Second layer norm before FF
+            ff_out = layer["ff_out"](F.relu(layer["ff_in"](ff_input)))
+            h = h + ff_out  # Residual connection
 
         # Final output projection
         logits = self.output_proj(h)
