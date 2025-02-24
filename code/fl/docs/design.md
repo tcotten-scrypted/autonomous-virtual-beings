@@ -556,3 +556,22 @@ Dropout is introduced to **improve training stability and prevent overfitting** 
 ### Conclusion
 Dropout remains **inactive for the current tiny model** but **scales dynamically for future expansions**, ensuring robustness while preserving information.
 
+### Why We Apply RoPE to Values (V)
+
+Traditionally, **Rotary Positional Embeddings (RoPE) are applied only to Queries (Q) and Keys (K)** because attention scores encode relative positional information. However, we extend RoPE to **Values (V)** for the following reasons:
+
+1. **Increased Expressivity in Small Models**  
+   - With a tiny embedding size (`d_model=4`), the model has **limited capacity** to capture complex positional structures.  
+   - Rotating V ensures that **positional information is not lost in the attention output**, improving representation quality.
+
+2. **Future-Proofing for Larger Models (Origami Expansion)**  
+   - As the model **scales**, deeper layers require **stronger positional coherence** across representations.  
+   - Applying RoPE to V ensures that positional information **propagates fully through residual connections**, benefiting future expansions.
+
+3. **Minimal Computational Cost, High Potential Gain**  
+   - RoPE is a simple **element-wise transformation** with **no additional learned parameters**.  
+   - The computational overhead is negligible, making it a **low-cost enhancement**.
+
+### Conclusion
+By rotating V, we enhance the **positional expressivity** of both **small models** and **larger Origami-expanded architectures**, ensuring stronger
+
