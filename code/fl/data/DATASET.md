@@ -4,8 +4,10 @@ This directory stores training and validation data files used by the model. Thes
 
 Sample files:
 ```
-sample-train.txt # Training data based on @elonmusk X posts
-sample-val.txt # Validations based on @elonmusk X posts
+sample-train.txt  # Training data based on @elonmusk X posts
+sample-val.txt    # Validations based on @elonmusk X posts
+sample-train2.txt # Synthetic training data for fake tweets mapping to a Bored or Interested emoji
+sample-val.txt    # Validations
 ```
 
 User expected files:
@@ -17,5 +19,5 @@ val.txt    # Validation data file (Base64 encoded input-output pairs)
 ## File Format
 Each line in these files should be a Base64-encoded string representing an input-output pair separated by a tab character. For example:
 ```
-SGVsbG8=\tV29ybGQ= # Hello World
+SGVsbG8=\tV29ybGQ= # Hello	World
 ```
