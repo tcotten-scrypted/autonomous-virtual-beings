@@ -12,6 +12,7 @@ for text generation, with configurable parameters for both processes.
 
 import argparse
 import base64
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -53,6 +54,17 @@ def generate_seed_data():
         data.append(f"{left}\t{right}\n")
 
     return data
+
+class OverwriteLastCheckpoint(pl.Callback):
+    def __init__(self, output_dir: str):
+        super().__init__()
+        self.dirpath = output_dir
+        os.makedirs(output_dir, exist_ok=True)
+        
+    def on_validation_end(self, trainer, pl_module):
+        # Save after each validation
+        checkpoint_path = os.path.join(self.dirpath, 'last.ckpt')
+        trainer.save_checkpoint(checkpoint_path)
 
 def train(
     train_file: str,
@@ -101,13 +113,12 @@ def train(
         dirpath=output_dir,
         filename='transformer-{epoch:02d}-{val_loss:.2f}',
         save_top_k=3,
-        monitor='val_loss',
-	save_last=True
+        monitor='val_loss'
     )
 
     trainer = pl.Trainer(
         max_epochs=max_epochs,
-        callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback, OverwriteLastCheckpoint(output_dir)],
         logger=logger,
         accelerator='auto',
         enable_progress_bar=True,
