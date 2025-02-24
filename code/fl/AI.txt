@@ -40,7 +40,7 @@ All AI-generated content has been reviewed and modified by human contributors to
 
 ## Training Data Attribution
 
-The model was trained on a randomized sample of tweets from @elonmusk's X.com account, processed and encoded as Base64 strings for training purposes.
+The sample training and validation data was procedurally generated: simple addition problems like 1+1=2 to demonstrate the tiny model's ability to mimic.
 
 ## Disclaimer
 

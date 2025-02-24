@@ -4,9 +4,7 @@ This directory stores training and validation data files used by the model. Thes
 
 Sample files:
 ```
-sample-train.txt  # Training data based on @elonmusk X posts
-sample-val.txt    # Validations based on @elonmusk X posts
-sample-train2.txt # Synthetic training data for fake tweets mapping to a Bored or Interested emoji
+sample-train.txt  # Training data based on simple addition problems: 1+1=\t2
 sample-val.txt    # Validations
 ```
 
