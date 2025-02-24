@@ -7,7 +7,7 @@ from pathlib import Path
 
 import torch
 
-from fluctlight.model import MinimalTransformer
+from fluctlight.model import FluctlightTransformer
 from fluctlight.utils import generate_continuation
 
 def main():
@@ -21,7 +21,7 @@ def main():
 
     # Load model from checkpoint
     print(f"Loading model from {args.checkpoint}")
-    model = MinimalTransformer.load_from_checkpoint(args.checkpoint)
+    model = FluctlightTransformer.load_from_checkpoint(args.checkpoint)
     model.eval()
 
     # Generate multiple samples
@@ -42,7 +42,7 @@ def main():
 
 def interactive_mode(model_path: str):
     """Run interactive generation mode."""
-    model = MinimalTransformer.load_from_checkpoint(model_path)
+    model = FluctlightTransformer.load_from_checkpoint(model_path)
     model.eval()
 
     print("\nEntering interactive mode (Ctrl+C to exit)")

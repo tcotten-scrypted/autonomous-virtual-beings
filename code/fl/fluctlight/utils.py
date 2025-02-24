@@ -1,5 +1,5 @@
 """
-Utility functions for the minimal Transformer implementation.
+Utility functions for the Fluctlight Transformer implementation.
 
 This module provides utilities for:
 1. Base64 encoding/decoding of training data

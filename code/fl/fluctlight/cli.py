@@ -1,5 +1,5 @@
 """
-Command-line interface for training and using the minimal Transformer.
+Command-line interface for training and using the Fluctlight Transformer.
 
 This module provides a CLI for:
 1. Training the model on Base64-encoded text data
@@ -19,7 +19,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from .model import MinimalTransformer
+from .model import FluctlightTransformer
 from .dataset import Base64Dataset, create_dataloader
 from .utils import generate_continuation
 
@@ -91,7 +91,7 @@ def train(
     val_loader = create_dataloader(val_dataset, batch_size=batch_size)
 
     # Create model
-    model = MinimalTransformer(learning_rate=learning_rate)
+    model = FluctlightTransformer(learning_rate=learning_rate)
 
     # Setup logger
     logger = TensorBoardLogger("lightning_logs", name="transformer")
@@ -140,7 +140,7 @@ def generate(
         temperature: Sampling temperature (higher = more random)
     """
     # Load model
-    model = MinimalTransformer.load_from_checkpoint(checkpoint_path)
+    model = FluctlightTransformer.load_from_checkpoint(checkpoint_path)
 
     # Generate continuation
     output = generate_continuation(
@@ -154,7 +154,7 @@ def generate(
     print(f"Generated: {output}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Minimal Transformer CLI")
+    parser = argparse.ArgumentParser(description="Fluctlight Transformer CLI")
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # Train command

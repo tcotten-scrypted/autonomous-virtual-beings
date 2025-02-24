@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from fluctlight.utils import decode_base64_pair, encode_base64_pair, generate_continuation
-from fluctlight.model import MinimalTransformer
+from fluctlight.model import FluctlightTransformer
 
 def test_base64_encoding_decoding():
     """Test Base64 encoding and decoding of pairs."""
@@ -25,7 +25,7 @@ def test_base64_encoding_decoding():
 def test_text_generation():
     """Test text generation utility."""
     # Create model
-    model = MinimalTransformer()
+    model = FluctlightTransformer()
     
     # Test generation
     input_str = "Hello"
@@ -41,7 +41,7 @@ def test_text_generation():
 
 def test_temperature_effect():
     """Test that temperature affects generation randomness."""
-    model = MinimalTransformer()
+    model = FluctlightTransformer()
     input_str = "Test"
     
     # Generate with high temperature (more random)

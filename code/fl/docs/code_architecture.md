@@ -8,7 +8,7 @@ graph TD
     end
 
     subgraph Core
-        model[model.py<br/>MinimalTransformer] --> dataset[dataset.py<br/>Base64Dataset]
+        model[model.py<br/>FluctlightTransformer] --> dataset[dataset.py<br/>Base64Dataset]
         model --> utils[utils.py<br/>Generation Utils]
     end
 
@@ -32,7 +32,7 @@ graph TD
 The codebase is organized into several key components:
 
 1. **Core Implementation** (`fluctlight/`)
-   - `model.py`: MinimalTransformer implementation with RoPE
+   - `model.py`: FluctlightTransformer implementation with RoPE
    - `dataset.py`: Data handling and Base64 dataset
    - `utils.py`: Text generation and encoding utilities
    - `cli.py`: Command-line interface

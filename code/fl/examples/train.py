@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from fluctlight.model import MinimalTransformer
+from fluctlight.model import FluctlightTransformer
 from fluctlight.dataset import Base64Dataset, create_dataloader
 
 def main():
@@ -27,7 +27,7 @@ def main():
     val_loader = create_dataloader(val_dataset, batch_size=batch_size)
 
     # Create model
-    model = MinimalTransformer(learning_rate=learning_rate)
+    model = FluctlightTransformer(learning_rate=learning_rate)
 
     # Setup logger
     logger = TensorBoardLogger("lightning_logs", name="transformer")

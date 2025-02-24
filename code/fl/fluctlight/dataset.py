@@ -1,5 +1,5 @@
 """
-Dataset handling utilities for the minimal Transformer.
+Dataset handling utilities for the Fluctlight Transformer.
 """
 
 import base64
@@ -122,28 +122,28 @@ def create_dataloader(
 
 def collate_sequences(batch: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Collate function for padding input and target sequences to the same length.
-
-    Args:
-        batch: List of (input_tensor, target_tensor) tuples.
-
-    Returns:
-        Tuple of padded tensors (inputs, targets) with shape [batch_size, max_seq_len].
+    Collate function for padding sequences to the same length, respecting max context window.
     """
-    inputs, targets = zip(*batch)  # Separate input and target sequences
-
-    # Find max length in batch
-    max_len = max(seq.size(0) for seq in inputs + targets)  # Consider both inputs and targets
-
+    inputs, targets = zip(*batch)
+    
+    # Apply context window limit (matching model's limit)
+    MAX_CONTEXT = 64
+    inputs = [seq[-MAX_CONTEXT:] for seq in inputs]
+    targets = [seq[-MAX_CONTEXT:] for seq in targets]
+    
+    # Find max length in batch (now both sequences are limited)
+    max_len = max(seq.size(0) for seq in inputs)  # Only need to check inputs
+    
     # Get device from the first tensor
     device = inputs[0].device if inputs else torch.device('cpu')
-
+    
     # Create padding tensors
     input_padded = torch.full((len(inputs), max_len), 0, dtype=torch.long, device=device)
     target_padded = torch.full((len(targets), max_len), 0, dtype=torch.long, device=device)
-
+    
+    # Fill tensors
     for i, (inp, tgt) in enumerate(zip(inputs, targets)):
         input_padded[i, :inp.size(0)] = inp
         target_padded[i, :tgt.size(0)] = tgt
-
+    
     return input_padded, target_padded

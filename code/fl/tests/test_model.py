@@ -5,11 +5,11 @@ Tests for the minimal Transformer model.
 import torch
 import pytest
 
-from fluctlight.model import MinimalTransformer
+from fluctlight.model import FluctlightTransformer
 
 def test_model_initialization():
     """Test that model initializes correctly."""
-    model = MinimalTransformer()
+    model = FluctlightTransformer()
     
     assert model.vocab_size == 256
     assert model.d_model == 4
@@ -19,7 +19,7 @@ def test_model_initialization():
 
 def test_model_forward():
     """Test model forward pass."""
-    model = MinimalTransformer()
+    model = FluctlightTransformer()
     
     # Create sample input
     batch_size = 2
@@ -34,7 +34,7 @@ def test_model_forward():
 
 def test_rope_application():
     """Test Rotary Positional Embedding."""
-    model = MinimalTransformer()
+    model = FluctlightTransformer()
     
     # Create sample queries and keys
     batch_size = 2
@@ -59,7 +59,7 @@ def test_rope_application():
 
 def test_causal_attention_mask():
     """Test that causal masking works correctly."""
-    model = MinimalTransformer()
+    model = FluctlightTransformer()
     
     # Create sample sequence
     batch_size = 1

@@ -1,5 +1,5 @@
 """
-Implementation of a minimal Transformer model with Rotary Positional Embeddings (RoPE).
+Implementation of a Fluctlight Transformer model with Rotary Positional Embeddings (RoPE).
 
 This implementation focuses on efficiency and clarity while maintaining core Transformer 
 functionality. The model uses byte-level tokenization (vocab size: 256) and RoPE for
@@ -36,9 +36,9 @@ def get_default_device() -> torch.device:
         return torch.device("cuda")
     return torch.device("cpu")
 
-class MinimalTransformer(pl.LightningModule):
+class FluctlightTransformer(pl.LightningModule):
     """
-    A minimal Transformer implementation using Rotary Positional Embeddings (RoPE).
+    A Fluctlight Transformer implementation using Rotary Positional Embeddings (RoPE).
     """
 
     def __init__(

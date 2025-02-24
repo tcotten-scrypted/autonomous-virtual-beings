@@ -3,7 +3,7 @@ Test device handling and tensor placement in the model and dataset.
 """
 
 import torch
-from fluctlight.model import MinimalTransformer, get_default_device
+from fluctlight.model import FluctlightTransformer, get_default_device
 from fluctlight.dataset import Base64Dataset
 
 def test_device_detection():
@@ -13,7 +13,7 @@ def test_device_detection():
     print(f"\nDetected device: {device}")
     
     # Initialize model
-    model = MinimalTransformer(device=device)
+    model = FluctlightTransformer(device=device)
     print(f"Model device: {model.device}")
     
     # Create a sample input

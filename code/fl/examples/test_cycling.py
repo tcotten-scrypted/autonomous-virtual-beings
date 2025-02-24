@@ -1,5 +1,5 @@
 """
-Test cycling script for the minimal Transformer with sliding window visualization.
+Test cycling script for the Fluctlight Transformer with sliding window visualization.
 """
 
 import os
@@ -21,7 +21,7 @@ from rich.panel import Panel
 from rich.text import Text
 from rich import box
 
-from fluctlight.model import MinimalTransformer
+from fluctlight.model import FluctlightTransformer
 
 
 def create_layout() -> Layout:
@@ -224,7 +224,7 @@ def main():
         print(f"Loading checkpoint: {checkpoint_path}")
 
         # Initialize model and get device
-        model = MinimalTransformer.load_from_checkpoint(checkpoint_path)
+        model = FluctlightTransformer.load_from_checkpoint(checkpoint_path)
         model.eval()
         device = model.device
         

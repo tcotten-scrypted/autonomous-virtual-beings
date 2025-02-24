@@ -1,6 +1,6 @@
-Minimal Transformer with RoPE – Implementation and Documentation
+Fluctlight Transformer – Implementation and Documentation
 
-1. Minimal Transformer Implementation (PyTorch Lightning)
+1. A Minimal Transformer Implementation w/ RoPE (PyTorch Lightning)
 
 Below is a complete PyTorch Lightning implementation of a minimal Transformer model with Rotary Positional Embedding (RoPE). This model uses a vocabulary of 256 (extended ASCII), embedding size 4, two Transformer encoder layers, and two attention heads (each head of dimension 2). It includes token embedding, causal self-attention (with RoPE applied to Q & K), a feed-forward network (4 → 8 → 4), residual connections, and layer normalization. The LightningModule handles training and validation steps (using cross-entropy loss).
 
@@ -12,7 +12,7 @@ Training Data
 
 Purpose and Design Philosophy
 
-This project demonstrates a minimal Transformer – a tiny Transformer model with only on the order of 2,900 parameters. The purpose is to create the simplest functional Transformer to study and illustrate how Transformers work at a basic level. By using extremely small dimensions (embedding size 4, feed-forward hidden size 8, 2 heads, 2 layers), the model is easy to train on a CPU and easy to inspect or even overfit on a small dataset. Starting with such a minimal model (2.9K params) provides a baseline that can be progressively expanded to larger models. This minimal design is great for learning and debugging: it’s small enough to train quickly and observe behaviors (e.g. learning simple mappings), and it serves as a starting point for future unfolding (growing the model in size while reusing the learned parameters).
+This project demonstrates a Fluctlight Transformer – a tiny Transformer model with only on the order of 2,900 parameters. The purpose is to create the simplest functional Transformer to study and illustrate how Transformers work at a basic level. By using extremely small dimensions (embedding size 4, feed-forward hidden size 8, 2 heads, 2 layers), the model is easy to train on a CPU and easy to inspect or even overfit on a small dataset. Starting with such a minimal model (2.9K params) provides a baseline that can be progressively expanded to larger models. This minimal design is great for learning and debugging: it’s small enough to train quickly and observe behaviors (e.g. learning simple mappings), and it serves as a starting point for future unfolding (growing the model in size while reusing the learned parameters).
 
 Despite its size, the model includes all key components of a Transformer:
 	•	Token embeddings for a vocabulary of 256 (covering extended ASCII characters).
@@ -25,7 +25,7 @@ The use case for this model is primarily educational and experimental. It can le
 
 Model Architecture
 
-The minimal Transformer architecture is a drastically scaled-down version of a standard Transformer encoder-decoder, essentially functioning as a decoder-only Transformer (like a small language model) for sequence-to-sequence mapping. All tokens (input and output) are handled in one sequence with a special delimiter (tab character) separating input and output. The model sees the input (and delimiter) and is trained to predict the output tokens.
+The Fluctlight Transformer architecture is a drastically scaled-down version of a standard Transformer encoder-decoder, essentially functioning as a decoder-only Transformer (like a small language model) for sequence-to-sequence mapping. All tokens (input and output) are handled in one sequence with a special delimiter (tab character) separating input and output. The model sees the input (and delimiter) and is trained to predict the output tokens.
 
 Key architecture hyperparameters and components:
 	•	Vocabulary: 256 tokens, representing extended ASCII. Each character (byte) is a token. This includes standard printable ASCII and control characters (we use the tab character as a delimiter).
@@ -95,18 +95,18 @@ How RoPE helps scaling: Rotary Positional Embedding is particularly handy when s
 
 Training Guidelines
 
-Training this minimal Transformer requires careful handling of data and expectations:
+Training this Fluctlight Transformer requires careful handling of data and expectations:
 	•	Data Preparation: The training and validation data should consist of input-output pairs that the model will learn to map. In our sample, each line after decoding is structured as input_string<TAB>output_string. We use Base64 encoding in the sample files to ensure all characters are safe to handle (only printable ASCII). In a real training script, you would read each line, Base64-decode it to get the raw input and output, then tokenize those. Tokenization here is simple: each character (byte) is a token ID (0–255 range). For example, the letter “A” (ASCII 65) would be token 65, a space (ASCII 32) is token 32, etc. The tab delimiter is ASCII 9, which is included in the vocab.
 	•	Batching and Padding: Since sequences may have varying lengths, you can pad sequences in a batch to the same length. Ensure that the padding token (for instance, ASCII 0 or another unused token) is also masked out in the loss. The provided code uses an ignore mask for the input part and would also ignore any target positions set to -100. You should set padded token targets to -100 as well so they don’t contribute to loss.
 	•	Loss Computation: We train the model as a causal language model, predicting the next token. However, we only want to compute loss on the output portion of each sequence. The training loop handles this by masking: it ignores loss for predictions that correspond to the input or the tab delimiter. This way, the model isn’t trained to predict the input (which is given) or to predict the delimiter (we supply it). It only learns to predict the output characters given everything that comes before them in the sequence.
 	•	Expected Performance: With such a tiny model, you should not expect it to generalize beyond the training data for anything complex. Its capacity is enough to memorize a few hundred patterns. For instance, if you have ~400 training pairs (like in our sample), the model can typically overfit them — achieving very low training loss after enough epochs. Validation loss will start low if validation pairs overlap with training patterns or remain higher if they are somewhat different. As an estimate, the model might perfectly memorize ~500 short sequences after training for a few epochs (say 100-200 epochs, depending on learning rate and complexity of patterns). If you see training loss flattening near 0 but validation loss stagnating above 0, that’s a sign of overfitting (expected given small data and model).
 	•	Overfitting and Generalization: Because the model is so small, it actually overfits extremely fast. To see any generalization, you’d need to limit training time or provide many variations of a pattern so the model finds a rule. If the task is something like “shift each character by +1” (a simple cipher), the model could potentially learn the rule and apply it to unseen strings, but with 4-d embeddings it might still just memorize the mapping table. If you want to reduce overfitting, you could add some regularization: e.g., dropout (not included in this minimal code) or early stopping based on validation loss.
 	•	Training Strategy: A good strategy is to start with a relatively higher learning rate (e.g. 1e-3 as in the code) since the model is small and data is small. Monitor training loss — it should drop quickly. If it plateaus or oscillates, you can try lowering the learning rate. Because the model is simple, it’s also possible to use a very high learning rate (even 1e-2) for quick convergence, but watch for instability. In PyTorch Lightning, we log training and validation loss; you can enable the progress bar to see live metrics. Given the tiny scale, you might run, say, 1000 training iterations (a few epochs if batch size is small) and achieve near-zero training loss. There’s not much danger of underfitting here — the main risk is overfitting, which in this context is fine since we primarily want the model to learn the training pairs.
-	•	Data Size vs. Model Capacity: Rough guideline: ~2.9K parameters can perfectly memorize on the order of hundreds of short sequences. If you provided thousands of training pairs, the model might not have enough capacity to memorize them all well, leading to higher training loss floor. In such a case, either increase model size or reduce task complexity. For demonstrating the minimal Transformer, a few hundred training examples (like 400) is plenty.
+	•	Data Size vs. Model Capacity: Rough guideline: ~2.9K parameters can perfectly memorize on the order of hundreds of short sequences. If you provided thousands of training pairs, the model might not have enough capacity to memorize them all well, leading to higher training loss floor. In such a case, either increase model size or reduce task complexity. For demonstrating the Fluctlight Transformer, a few hundred training examples (like 400) is plenty.
 
 Code Structure and Usage
 
-The implementation is contained in a single class MinimalTransformer (a subclass of pl.LightningModule). Here’s a breakdown of the structure:
+The implementation is contained in a single class FluctlightTransformer (a subclass of pl.LightningModule). Here’s a breakdown of the structure:
 	•	__init__: Defines the embedding layer, the ModuleList of Transformer layers, and the final output projection. Each Transformer layer is a ModuleDict with its own weights for Wq, Wk, Wv, Wo (attention projections), feed-forward layers (ff_in and ff_out), and LayerNorms (ln1 and ln2). The model also stores a tab_token_id (ASCII code 9) for convenience in masking.
 	•	forward(x): Takes a batch of token sequences x (shape [batch, seq_len]) and returns the logits for each token in the sequence (shape [batch, seq_len, vocab_size]). Inside, it performs token embedding, then iterates through each Transformer layer:
 	•	Applies LayerNorm (depending on whether we use pre-norm or post-norm, our code actually does a LayerNorm on the input to attention and after adding residual – effectively doing post-norm twice which might be redundant; one could simplify, but we kept it explicit for clarity).
@@ -122,7 +122,7 @@ The implementation is contained in a single class MinimalTransformer (a subclass
 
 Running the training:
 	1.	Prepare DataLoader: You should create a torch.utils.data.Dataset that reads the train.txt file. Each line should be Base64-decoded to get the raw input\toutput string. Then split on \t to separate input and output. Finally, convert the combined string (input + tab + output) into a list of token IDs (for example, using bytes(sequence, 'ascii') to get the byte values directly works since our vocab is just byte values). Return this list of IDs as a tensor. Do the same for validation. Because sequences can have different lengths, you might want to implement a custom collate_fn that pads sequences to the same length in a batch and returns a tensor and perhaps the original length or mask (the code as written can infer mask from tab position and ignores pad if pad token is set to -100 in targets).
-	2.	Initialize Model: model = MinimalTransformer(). You can adjust hyperparameters here if needed (though the prompt specifics fix them: vocab_size=256, d_model=4, etc.).
+	2.	Initialize Model: model = FluctlightTransformer(). You can adjust hyperparameters here if needed (though the prompt specifics fix them: vocab_size=256, d_model=4, etc.).
 	3.	Training Loop: Using PyTorch Lightning, you can instantiate a Trainer:
 
 trainer = pl.Trainer(max_epochs=50, gradient_clip_val=1.0)
@@ -143,11 +143,7 @@ You might wonder why our sample data is Base64-encoded. This is mainly for conve
 	•	When using an interactive environment or certain shells, tabs and some control characters can have special meanings (like tab might auto-complete or indent). By storing data in Base64, we treat everything as plain text until we deliberately decode it in the training script.
 	•	In this particular write-up (in Markdown), including raw tabs or certain bytes could be misinterpreted by the markdown renderer. So Base64 is a way to embed the data cleanly in this document.
 
-When training the model, you’d decode the Base64 to get the actual string. After that, the data processing is straightforward. In summary, Base64 is used here to simplify the presentation and handling of example data, ensuring the focus remains on the model rather than data format quirks.
-
-With this setup, you have a complete minimal Transformer implementation and the knowledge to train and expand it. You can experiment by training the model on the provided sample data (after decoding it) and observing how quickly it learns the mappings. Then, try the progressive expansion: for instance, double the embedding size to 8 and see if you can reuse the tiny model’s weights to initialize a slightly larger model (you’d have to write some code to transplant weights). This can validate the concept of unfolding.
-
-Even without expansion, this minimal Transformer is a powerful demonstration: it’s a fully working sequence transducer in under 3K parameters. By carefully designing the experiment (small data, simple task), it can reach near-perfect accuracy, underscoring that even the mighty Transformer architecture can be distilled to a very basic form and still function. Have fun with this tiny Transformer!  ￼ ￼
+When training the model, you’d decode the Base64 to get the actual string. After that, the data processing is straightforward. In summary, Base64 is used here to simplify the presentation and handling of example data, ensuring the focus remains on the model rather than data format quirks. ￼
 
 ### Why We Do Not Use `nn.TransformerEncoderLayer`
 
