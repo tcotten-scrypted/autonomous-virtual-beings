@@ -102,14 +102,16 @@ class MinimalTransformer(pl.LightningModule):
     def device(self) -> torch.device:
         """Get the device the model is on."""
         return self._device
-
+    
     def _apply_rope(
         self, 
         q: torch.Tensor, 
         k: torch.Tensor, 
+        v: torch.Tensor,  # Now correctly modifying V
         seq_len: int
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Apply Rotary Positional Embedding."""
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Apply Rotary Positional Embedding (RoPE) to Q, K, and V."""
+
         # Generate position-dependent rotation angles
         pos = torch.arange(seq_len, device=self.device, dtype=torch.float).unsqueeze(1)
         dim_idx = torch.arange(self.head_dim // 2, device=self.device, dtype=torch.float)
@@ -120,21 +122,20 @@ class MinimalTransformer(pl.LightningModule):
         cos = torch.cos(angles).unsqueeze(0).unsqueeze(0)
         sin = torch.sin(angles).unsqueeze(0).unsqueeze(0)
 
-        # Split into even and odd dimensions
-        q_even, q_odd = q[..., 0::2], q[..., 1::2]
-        k_even, k_odd = k[..., 0::2], k[..., 1::2]
+        def apply_rotary(tensor):
+            """Applies RoPE transformation safely, checking dimensions."""
+            if tensor.shape[-1] % 2 != 0:
+                raise ValueError(f"RoPE requires an even last dimension, but got shape {tensor.shape}")
 
-        # Apply rotation
-        q_rotated_even = q_even * cos - q_odd * sin
-        q_rotated_odd = q_even * sin + q_odd * cos
-        k_rotated_even = k_even * cos - k_odd * sin
-        k_rotated_odd = k_even * sin + k_odd * cos
+            even, odd = tensor[..., 0::2], tensor[..., 1::2]
+            rotated_even = even * cos - odd * sin
+            rotated_odd = even * sin + odd * cos
+            return torch.cat([rotated_even, rotated_odd], dim=-1)  # Concatenate correctly
 
-        # Recombine rotated dimensions
-        q = torch.stack([q_rotated_even, q_rotated_odd], dim=-1).reshape(*q.shape)
-        k = torch.stack([k_rotated_even, k_rotated_odd], dim=-1).reshape(*k.shape)
+        # Apply RoPE to Q, K, and V
+        q, k, v = apply_rotary(q), apply_rotary(k), apply_rotary(v)
 
-        return q, k
+        return q, k, v 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the Transformer."""
@@ -161,7 +162,7 @@ class MinimalTransformer(pl.LightningModule):
             v = v.view(B, seq_len, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
 
             # Apply RoPE to Q and K
-            q, k = self._apply_rope(q, k, seq_len)
+            q, k, v = self._apply_rope(q, k, v, seq_len)
 
             # Compute attention scores
             attn_scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
