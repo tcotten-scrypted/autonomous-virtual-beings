@@ -532,3 +532,27 @@ While `nn.TransformerEncoderLayer` provides a cleaner API, we **intentionally av
 ### Conclusion
 By keeping `nn.ModuleDict()`, we **preserve full control over attention and feed-forward components**, ensuring smooth compatibility with **Origami-based model expansion** in the future.
 
+### Why We Added Dropout (Dynamic Scaling)
+
+Dropout is introduced to **improve training stability and prevent overfitting** in **larger models** while ensuring **no harmful effects on small models**.
+
+1. **Small Models (`d_model=4`) Remain Unaffected**  
+   - Dropout is dynamically computed as:  
+     \[
+     \text{dropout} = \min(0.1, 0.5 \times \frac{d_{\text{model}}}{256})
+     \]
+   - For **tiny models** (e.g., `d_model=4`), this results in **near-zero dropout**, preventing information loss.
+
+2. **Scales Automatically for Future Expansions**  
+   - As **Origami expands the model**, dropout **gradually increases**, helping **larger networks** avoid overfitting.
+   - The rate **caps at 10% (`0.1`)**, ensuring it never removes too much information.
+
+3. **Applied Before Residual Connections**  
+   - Dropout is **only applied before residual connections** in:
+     - **Self-Attention Output**
+     - **Feed-Forward Network Output**
+   - This follows **best practices** for stabilizing Transformer training.
+
+### Conclusion
+Dropout remains **inactive for the current tiny model** but **scales dynamically for future expansions**, ensuring robustness while preserving information.
+
