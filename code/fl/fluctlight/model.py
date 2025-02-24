@@ -58,6 +58,13 @@ class MinimalTransformer(pl.LightningModule):
         self.n_heads = n_heads
         self.head_dim = d_model // n_heads
         self.learning_rate = learning_rate
+        
+        # Compute dynamic dropout rate based on model size
+        # Small models (pre-Origami expansions) should neglibibly drop tokens
+        # Large models (post-Origami expansions) should drop more tokens
+        # but cap at 10% to avoid over-dropping
+        self.dropout_rate = min(0.1, 0.5 * (self.d_model / 256))
+        self.dropout = nn.Dropout(self.dropout_rate)
 
         # Set device (use passed device or detect optimal device)
         self._device = device if device is not None else get_default_device()
@@ -175,11 +182,13 @@ class MinimalTransformer(pl.LightningModule):
             attn_out = layer["Wo"](attn_out)
 
             # Residual connection and layer norm
+            attn_out = self.dropout(attn_out)
             h = h + attn_out
             
             # Feed-forward with second layer norm
             ff_input = layer["ln2"](h)  # Second layer norm before FF
             ff_out = layer["ff_out"](F.relu(layer["ff_in"](ff_input)))
+            ff_out = self.dropout(ff_out)
             h = h + ff_out  # Residual connection
 
         # Final output projection
