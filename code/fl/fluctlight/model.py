@@ -200,10 +200,17 @@ class MinimalTransformer(pl.LightningModule):
             raise ValueError("Expected tuple of (input, target)")
 
         # Forward pass and loss computation
-        logits = self(input_seq)
+        logits = self(input_seq)  # shape: [B, seq_len, vocab_size]
+        
+        # Shift target sequence by one position (predict next token)
+        # Target becomes [1:] and we predict using input [:1]
+        logits = logits[:, :-1, :]  # Remove last position prediction
+        target_seq = target_seq[:, 1:]  # Remove first position target
+    
+        # Forward pass and loss computation
         loss = F.cross_entropy(
-            logits.view(-1, self.vocab_size),
-            target_seq.view(-1),
+            logits.contiguous().view(-1, self.vocab_size),
+            target_seq.contiguous().view(-1),
             ignore_index=-100
         )
 
@@ -219,12 +226,18 @@ class MinimalTransformer(pl.LightningModule):
             target_seq = target_seq.to(self.device)
         else:
             raise ValueError("Expected tuple of (input, target)")
-
+        
         # Forward pass and loss computation
         logits = self(input_seq)
+        
+        # Shift target sequence by one position
+        logits = logits[:, :-1, :]
+        target_seq = target_seq[:, 1:]
+
+        # Forward pass and loss computation
         val_loss = F.cross_entropy(
-            logits.view(-1, self.vocab_size),
-            target_seq.view(-1),
+            logits.contiguous().view(-1, self.vocab_size),
+            target_seq.contiguous().view(-1),
             ignore_index=-100
         )
 
