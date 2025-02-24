@@ -90,22 +90,18 @@ def format_log(log_entries: List[str]) -> str:
     """Format log entries for display."""
     return "\n".join(log_entries[-10:])  # Show last 10 entries
 
-
 def format_for_display(raw_text: str) -> str:
     """
-    Normalize the raw text and replace unprintable characters
-    (except newline, tab, and space) with a replacement.
-    """
-    normalized = unicodedata.normalize('NFC', raw_text)
-    result_chars = []
-    for c in normalized:
-        # Allow newline, tab, and space even if isprintable() returns False for them.
-        if c in "\n\t " or c.isprintable():
-            result_chars.append(c)
-        else:
-            result_chars.append('�')
-    return ''.join(result_chars)
+    Ensures the text is safely printable by replacing control characters with '<?>'
+    while preserving spaces, tabs, and newlines.
 
+    - Avoids slow utf-8 decoding.
+    - Keeps formatting responsive in Rich UI.
+    - Retains whitespace characters (\t, \n, and spaces) for readability.
+    """
+    return ''.join(
+        c if c in {' ', '\t', '\n'} or unicodedata.category(c)[0] != 'C' else '�'
+        for c in raw_text)
 
 def extract_val_loss(filename: str) -> float:
     """Extract validation loss from checkpoint filename."""
@@ -148,7 +144,7 @@ def main():
 
         # Initialize tracking variables
         # raw_text is used for token generation; display_text is computed for UI
-        raw_text = "Good morning."
+        raw_text = "gm 😊"
         log_entries: List[str] = []
         window_sizes: List[int] = []
         total_tokens = len(raw_text)
