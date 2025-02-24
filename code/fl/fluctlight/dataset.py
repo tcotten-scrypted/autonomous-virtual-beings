@@ -10,8 +10,6 @@ import multiprocessing
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-import multiprocessing
-
 from fluctlight.utils import decode_base64_pair
 
 def get_num_cpu_workers(reserved_workers=1):
@@ -31,10 +29,10 @@ def get_default_device() -> torch.device:
     """
     Get the optimal available device (Metal, CUDA, or CPU).
     """
-    if torch.backends.mps.is_available():
-        return torch.device("mps")  # Apple Silicon GPU
-    elif torch.cuda.is_available():
+    if torch.cuda.is_available():
         return torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        return torch.device("mps")  # Apple Silicon
     return torch.device("cpu")
 
 class Base64Dataset(Dataset):
@@ -44,7 +42,7 @@ class Base64Dataset(Dataset):
         self,
         file_path: Union[str, Path],
         device: Optional[torch.device] = None,
-        prepend: Optional[List[str]] = []
+        prepend: Optional[List[str]] = None
     ):
         """
         Initialize the dataset.
@@ -57,31 +55,30 @@ class Base64Dataset(Dataset):
         self.data: List[str] = []
         self.device = device if device is not None else get_default_device()
         
-        # Prepend optional training data, such as the ASCII cycle 
+        # Prepend optional training data, such as the extended ASCII cycle 
         if prepend:
             for line in prepend:
-                a, b = decode_base64_pair(line)
-                self.data.append(self.create_tensor_pair(a, b))
+                self.data.append(self.create_tensor_pair(*decode_base64_pair(line)))
 
-        # Load and decode data
+        # Load and decode file data
         with open(self.file_path, 'r') as f:
             for line in f:
-                a, b = decode_base64_pair(line)
-                self.data.append(self.create_tensor_pair(a, b))
-                    
-    def convert_to_tensor(self, line):
-        return torch.tensor([b for b in line], dtype=torch.long, device=self.device)
-    
-    def create_tensor_pair(self, a, b):
+                self.data.append(self.create_tensor_pair(*decode_base64_pair(line)))
+                 
+    @staticmethod
+    def convert_to_tensor(line: str, device: torch.device) -> torch.Tensor:
+        return torch.tensor([b for b in line], dtype=torch.long, device=device)
+   
+    def create_tensor_pair(self, input, target):
         return (
-            self.convert_to_tensor(a),
-            self.convert_to_tensor(b)
+            Base64Dataset.convert_to_tensor(input, self.device),
+            Base64Dataset.convert_to_tensor(target, self.device)
         )
 
     def __len__(self) -> int:
         return len(self.data)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]: 
         """
         Get a single example from the dataset.
 
