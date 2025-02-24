@@ -140,8 +140,10 @@ class FluctlightTransformer(pl.LightningModule):
         x = x.to(self.device)
         
         # Enforce context window limit
-        if x.shape[1] > 64:
-            x = x[:, -64:]  # Take only the last 64 tokens
+        MAX_CONTEXT = 64
+        AVAILABLE_CONTEXT = MAX_CONTEXT - 1
+        if x.shape[1] > AVAILABLE_CONTEXT:
+            x = x[:, -AVAILABLE_CONTEXT:]  # Take only the trailing tokens
         
         B, seq_len = x.shape
 

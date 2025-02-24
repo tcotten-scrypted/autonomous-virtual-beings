@@ -123,16 +123,23 @@ def create_dataloader(
 def collate_sequences(batch: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Collate function for padding sequences to the same length, respecting max context window.
+    Total sequence length (input + target shift) should not exceed MAX_CONTEXT.
     """
     inputs, targets = zip(*batch)
     
-    # Apply context window limit (matching model's limit)
+    # Apply context window limit
     MAX_CONTEXT = 64
-    inputs = [seq[-MAX_CONTEXT:] for seq in inputs]
-    targets = [seq[-MAX_CONTEXT:] for seq in targets]
+    AVAILABLE_CONTEXT = MAX_CONTEXT - 1
+    # Ensure total sequence length doesn't exceed MAX_CONTEXT
+    combined_sequences = []
+    for inp, tgt in zip(inputs, targets):
+        if inp.size(0) > AVAILABLE_CONTEXT:
+            combined_sequences.append(inp[-AVAILABLE_CONTEXT:])
+        else:
+            combined_sequences.append(inp)
     
-    # Find max length in batch (now both sequences are limited)
-    max_len = max(seq.size(0) for seq in inputs)  # Only need to check inputs
+    # Find max length that allows for shifting
+    max_len = max(seq.size(0) for seq in combined_sequences)
     
     # Get device from the first tensor
     device = inputs[0].device if inputs else torch.device('cpu')
@@ -142,8 +149,8 @@ def collate_sequences(batch: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[t
     target_padded = torch.full((len(targets), max_len), 0, dtype=torch.long, device=device)
     
     # Fill tensors
-    for i, (inp, tgt) in enumerate(zip(inputs, targets)):
-        input_padded[i, :inp.size(0)] = inp
-        target_padded[i, :tgt.size(0)] = tgt
+    for i, seq in enumerate(combined_sequences):
+        input_padded[i, :seq.size(0)] = seq
+        target_padded[i, :seq.size(0)] = seq
     
     return input_padded, target_padded
