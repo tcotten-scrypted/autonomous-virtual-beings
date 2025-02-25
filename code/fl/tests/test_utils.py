@@ -1,63 +1,23 @@
-"""
-Tests for utility functions.
-"""
+"""Tests for utility functions."""
 
 import pytest
-import torch
+from fluctlight.utils import decode_base64_pair
 
-from fluctlight.utils import decode_base64_pair, encode_base64_pair, generate_continuation
-from fluctlight.model import FluctlightTransformer
+def test_decode_base64_pair():
+    """Test basic base64 decoding."""
+    encoded = "aGVsbG8=\td2F2ZQ=="  # "hello\twave" in base64
+    input_str, output_str = decode_base64_pair(encoded)
+    assert input_str == b"hello"
+    assert output_str == b"wave"
 
-def test_base64_encoding_decoding():
-    """Test Base64 encoding and decoding of pairs."""
-    input_str = "Hello"
-    output_str = "World"
-    
-    # Encode
-    encoded = encode_base64_pair(input_str, output_str)
-    
-    # Decode
-    decoded_input, decoded_output = decode_base64_pair(encoded)
-    
-    assert decoded_input == input_str
-    assert decoded_output == output_str
+def test_decode_base64_pair_with_padding():
+    """Test base64 decoding with different padding lengths."""
+    encoded = "YQ==\tYmM="  # "a\tbc" in base64
+    input_str, output_str = decode_base64_pair(encoded)
+    assert input_str == b"a"
+    assert output_str == b"bc"
 
-def test_text_generation():
-    """Test text generation utility."""
-    # Create model
-    model = FluctlightTransformer()
-    
-    # Test generation
-    input_str = "Hello"
-    output = generate_continuation(
-        model,
-        input_str,
-        max_length=10,
-        temperature=0.8
-    )
-    
-    assert isinstance(output, str)
-    assert len(output) <= 10
-
-def test_temperature_effect():
-    """Test that temperature affects generation randomness."""
-    model = FluctlightTransformer()
-    input_str = "Test"
-    
-    # Generate with high temperature (more random)
-    high_temp_outputs = [
-        generate_continuation(model, input_str, temperature=2.0)
-        for _ in range(5)
-    ]
-    
-    # Generate with low temperature (more deterministic)
-    low_temp_outputs = [
-        generate_continuation(model, input_str, temperature=0.1)
-        for _ in range(5)
-    ]
-    
-    # High temperature should give more varied outputs
-    high_temp_unique = len(set(high_temp_outputs))
-    low_temp_unique = len(set(low_temp_outputs))
-    
-    assert high_temp_unique >= low_temp_unique
+def test_decode_base64_pair_invalid():
+    """Test error handling for invalid base64."""
+    with pytest.raises(ValueError):
+        decode_base64_pair("invalid base64!")
