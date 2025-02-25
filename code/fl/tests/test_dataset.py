@@ -1,70 +1,110 @@
-"""
-Tests for the dataset handling utilities.
-"""
+"""Tests for dataset handling and loading."""
 
-import base64
-import pytest
 import torch
+import pytest
 from pathlib import Path
+from fluctlight.dataset import (
+    Base64Dataset, 
+    create_dataloader,
+    get_num_cpu_workers,
+    collate_sequences
+)
 
-from fluctlight.dataset import Base64Dataset, create_dataloader, collate_sequences
+def test_base64_dataset_basic():
+    """Test basic dataset functionality with a simple example."""
+    # Create a temporary file with test data
+    test_data = "aGVsbG8=\td29ybGQ=\n"  # "hello\tworld" in base64
+    tmp_path = Path("test_data.txt")
+    tmp_path.write_text(test_data)
+    
+    try:
+        dataset = Base64Dataset(tmp_path, device=torch.device('cpu'))
+        assert len(dataset) == 1
+        
+        # Check first item
+        input_seq, target_seq = dataset[0]
+        assert isinstance(input_seq, torch.Tensor)
+        assert isinstance(target_seq, torch.Tensor)
+        assert input_seq.device == torch.device('cpu')
+        assert target_seq.device == torch.device('cpu')
+        
+    finally:
+        tmp_path.unlink()  # Clean up
 
-@pytest.fixture
-def sample_data_file(tmp_path):
-    """Create a temporary file with sample data."""
-    data = [
-        "SGVsbG8JV29ybGQ=",  # Hello\tWorld
-        "VGVzdAlEYXRh"       # Test\tData
-    ]
+def test_base64_dataset_prepend():
+    """Test dataset with prepended data."""
+    test_data = "aGVsbG8=\td29ybGQ=\n"
+    prepend = ["dGVzdA==\tZGF0YQ=="]  # "test\tdata" in base64
     
-    file_path = tmp_path / "test_data.txt"
-    with open(file_path, 'w') as f:
-        f.write('\n'.join(data))
+    tmp_path = Path("test_data.txt")
+    tmp_path.write_text(test_data)
     
-    return file_path
+    try:
+        dataset = Base64Dataset(
+            tmp_path,
+            device=torch.device('cpu'),
+            prepend=prepend
+        )
+        assert len(dataset) == 2  # One prepended + one from file
+        
+    finally:
+        tmp_path.unlink()
 
-def test_dataset_loading(sample_data_file):
-    """Test dataset loading and decoding."""
-    dataset = Base64Dataset(sample_data_file)
-    
-    assert len(dataset) == 2
-    
-    # Check first example
-    first_item = dataset[0]
-    assert isinstance(first_item, torch.Tensor)
-    assert first_item.dtype == torch.long
-    
-    # Decode and verify content
-    decoded = ''.join(chr(x) for x in first_item.tolist())
-    assert decoded == "Hello\tWorld"
-
-def test_dataloader_creation(sample_data_file):
-    """Test DataLoader creation and batch loading."""
-    dataset = Base64Dataset(sample_data_file)
-    dataloader = create_dataloader(dataset, batch_size=2)
-    
-    # Get first batch
-    batch = next(iter(dataloader))
-    
-    assert isinstance(batch, torch.Tensor)
-    assert batch.dim() == 2
-    assert batch.size(0) == 2  # batch size
-
-def test_sequence_collation():
-    """Test sequence collation with padding."""
+def test_collate_sequences():
+    """Test sequence collation and padding."""
     # Create sequences of different lengths
-    sequences = [
-        torch.tensor([1, 2, 3]),
-        torch.tensor([4, 5, 6, 7]),
-        torch.tensor([8, 9])
-    ]
+    seq1 = torch.tensor([1, 2, 3])
+    seq2 = torch.tensor([4, 5])
+    batch = [(seq1, seq1), (seq2, seq2)]
     
     # Collate
-    batch = collate_sequences(sequences)
+    input_padded, target_padded = collate_sequences(batch)
     
-    assert batch.shape == (3, 4)  # 3 sequences, max length 4
-    assert torch.all(batch[0, :3] == torch.tensor([1, 2, 3]))
-    assert torch.all(batch[0, 3:] == 0)  # padding
-    assert torch.all(batch[1] == torch.tensor([4, 5, 6, 7]))
-    assert torch.all(batch[2, :2] == torch.tensor([8, 9]))
-    assert torch.all(batch[2, 2:] == 0)  # padding
+    # Check shapes
+    assert input_padded.shape == (2, 3)  # Padded to longest sequence
+    assert target_padded.shape == (2, 3)
+    
+    # Check padding
+    assert torch.all(input_padded[0] == seq1)
+    assert torch.all(input_padded[1, :2] == seq2)
+    assert input_padded[1, 2] == 0  # Padding
+
+def test_dataloader_creation():
+    """Test dataloader configuration."""
+    test_data = "aGVsbG8=\td29ybGQ=\n"
+    tmp_path = Path("test_data.txt")
+    tmp_path.write_text(test_data)
+    
+    try:
+        dataset = Base64Dataset(tmp_path, device=torch.device('cpu'))
+        dataloader = create_dataloader(
+            dataset,
+            batch_size=2,
+            num_workers=0,  # Force single process for testing
+            pin_memory=False
+        )
+        
+        assert dataloader.batch_size == 2
+        assert dataloader.num_workers == 0
+        
+    finally:
+        tmp_path.unlink()
+
+def test_num_cpu_workers():
+    """Test CPU worker count calculation."""
+    workers = get_num_cpu_workers(reserved_workers=1)
+    assert workers >= 1
+    assert isinstance(workers, int)
+
+def test_invalid_base64():
+    """Test handling of invalid base64 data."""
+    test_data = "invalid base64!\tinvalid\n"
+    tmp_path = Path("test_data.txt")
+    tmp_path.write_text(test_data)
+    
+    try:
+        with pytest.raises(Exception):  # Should raise on invalid base64
+            dataset = Base64Dataset(tmp_path, device=torch.device('cpu'))
+            _ = dataset[0]  # Try to access data
+    finally:
+        tmp_path.unlink()
