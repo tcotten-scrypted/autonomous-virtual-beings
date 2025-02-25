@@ -12,13 +12,23 @@ This project includes content generated with assistance from AI models. The AI-g
 1. Name: Replit Code Agent
    - Type: Code Assistant AI
    - Provider: Replit
-   - Usage: Primary development assistant for code implementation and debugging
+   - Usage: Scaffolding development assistant for code implementation and debugging
 
-2. Name: ChatGPT
+2. Name: Cursor
+   - Type: Code Assistant AI
+   - Provider: Cursor
+   - Usage: Scaffolding development assistant for code implementation and debugging
+
+3. Name: Claude Sonnet 3.7
+   - Type: Language Model
+   - Provider: Anthropic
+   - Usage: Optimizing code and debugging
+
+4. Name: ChatGPT
    - Type: Language Model
    - Provider: OpenAI
    - Version: 4
-   - Usage: Initial architecture planning and documentation review
+   - Usage: Initial architecture planning, debugging, and documentation review
 
 ## Usage Details
 
