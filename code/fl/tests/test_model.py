@@ -84,3 +84,49 @@ def test_causal_attention_mask():
         # Check that future positions are masked
         mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=1).bool()
         assert torch.all(attn_scores.masked_select(mask) == float('-inf'))
+
+def test_model_init():
+    """Test model initialization with default parameters."""
+    model = FluctlightTransformer(device=torch.device('cpu'))  # Force CPU
+    assert model.vocab_size == 256
+    assert model.d_model == 4
+    assert model.n_heads == 2
+    assert model.head_dim == 2
+    assert len(model.layers) == 2
+
+def test_context_window():
+    """Test context window enforcement."""
+    model = FluctlightTransformer(device=torch.device('cpu'))
+    x = torch.randint(0, 256, (1, 70))
+    output = model(x)
+    assert output.shape[1] == 63  # MAX_CONTEXT - 1
+
+def test_rope_application():
+    """Test RoPE transformation."""
+    model = FluctlightTransformer(device=torch.device('cpu'))
+    q = torch.randn(1, 2, 4, 2)
+    k = torch.randn(1, 2, 4, 2)
+    v = torch.randn(1, 2, 4, 2)
+    q_rope, k_rope, v_rope = model._apply_rope(q, k, v, 4)
+    assert q_rope.shape == q.shape
+    assert k_rope.shape == k.shape
+    assert v_rope.shape == v.shape
+    assert not torch.allclose(q, q_rope)
+    assert not torch.allclose(k, k_rope)
+    assert not torch.allclose(v, v_rope)
+
+def test_forward_shape():
+    """Test forward pass shapes."""
+    model = FluctlightTransformer(device=torch.device('cpu'))
+    x = torch.randint(0, 256, (2, 10))
+    output = model(x)
+    assert output.shape == (2, 10, 256)
+
+def test_training_step():
+    """Test training step with sequence shifting."""
+    model = FluctlightTransformer(device=torch.device('cpu'))
+    input_seq = torch.randint(0, 256, (2, 10))
+    target_seq = torch.randint(0, 256, (2, 10))
+    loss = model.training_step((input_seq, target_seq), 0)
+    assert isinstance(loss, torch.Tensor)
+    assert loss.ndim == 0  # scalar loss
