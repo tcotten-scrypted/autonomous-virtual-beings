@@ -30,6 +30,7 @@ Fluctlight is a minimalist implementation of the Transformer architecture that i
 ## Model Architecture
 
 The Fluctlight model uses the following configuration:
+- Parameters: 2,648
 - Vocabulary Size: 256 (byte-level encoding)
 - Hidden Dimension: 4
 - Number of Heads: 2
