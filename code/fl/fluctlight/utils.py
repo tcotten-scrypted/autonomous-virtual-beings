@@ -60,6 +60,9 @@ def generate_continuation(
     input_tokens = torch.tensor([ord(c) for c in input_str], dtype=torch.long, device=device)
     input_tokens = input_tokens.unsqueeze(0)  # Add batch dimension
 
+    # Maximum allowed sequence length (context window)
+    MAX_CONTEXT = 64
+    
     # Generate tokens autoregressively
     generated = []
     with torch.no_grad():
@@ -72,13 +75,13 @@ def generate_continuation(
             probs = torch.softmax(next_token_logits, dim=-1)
             next_token = torch.multinomial(probs, num_samples=1)
 
-            # Stop if we generate tab (sequence delimiter)
-            if next_token.item() == 9:  # ASCII tab
-                break
-
             # Append to sequence (ensure next_token is on the correct device)
             generated.append(next_token.item())
+            
+            # Ensure input_tokens does not exceed CONTEXT_WINDOW
             input_tokens = torch.cat([input_tokens, next_token.unsqueeze(0)], dim=1)
+            if input_tokens.shape[1] >= MAX_CONTEXT:
+                break  # Stop once the context window is full
 
     # Convert tokens back to string
     return ''.join(chr(t) for t in generated)
