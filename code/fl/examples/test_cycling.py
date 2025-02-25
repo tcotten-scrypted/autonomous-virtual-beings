@@ -238,7 +238,7 @@ def main():
 
         # Initialize tracking variables
         # raw_text is used for token generation; display_text is computed for UI
-        raw_text = "gm 😊"
+        raw_text = "1+1="
         display_text = str(raw_text)
         
         log_entries: List[str] = []
