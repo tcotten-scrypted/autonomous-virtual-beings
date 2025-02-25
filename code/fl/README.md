@@ -2,13 +2,23 @@
 
 # Fluctlight: Minimal Transformer with RoPE
 
-A modern Python implementation of a Transformer model with Rotary Positional Embeddings (RoPE), focusing on efficient text generation and model training.
+A modern Python implementation of a Transformer model with Rotary Positional Embeddings (RoPE), as a minimally viable model capable of pattern mimicry.
 
 > The name "Fluctlight" is inspired by Sword Art Online, where it represents the digital soul or consciousness that gives artificial beings their unique personalities and capabilities. Like its namesake, this project aims to create a minimal yet complete implementation that captures the essence of neural processing.
 
 ## Overview
 
-Fluctlight is a minimalist implementation of the Transformer architecture that incorporates Rotary Positional Embeddings (RoPE) for enhanced sequence modeling. The project demonstrates how to build and train a compact but effective language model.
+Fluctlight is a minimalist implementation of the Transformer architecture that incorporates Rotary Positional Embeddings (RoPE) in an experimental matter for enhanced sequence modeling. The project demonstrates how to build and train a compact but effective pattern mimicry model.
+
+### Experimental Goals
+
+- Create a minimally viable model capable of pattern mimicry
+- Test across multiple domains, including simulation & gaming
+- Test deploying in ZK circuits such as a Cairo-based decentralized network
+- Experiment for use as personality cores for AVBs
+
+### Unproven Areas of Interest
+- Train larger Origami-derived models from Fluctlights
 
 ### Key Features
 - PyTorch-based Transformer architecture
@@ -26,7 +36,7 @@ The Fluctlight model uses the following configuration:
 - Number of Layers: 2
 - Head Dimension: 2
 - Context Window: 64 tokens
-- Embedding: Rotary Positional Embedding (RoPE)
+- Embedding: Rotary Positional Embedding (RoPE) across Q, K, and V (yes, I know the latter is unusual)
 
 See the architecture diagrams in `docs/` for detailed visualization.
 
@@ -56,10 +66,10 @@ python -m fluctlight.cli train --train-file data/sample-train.txt --val-file dat
 
 3. Generate text:
 ```bash
-python -m fluctlight.cli generate --checkpoint checkpoints/last.ckpt --input-text "Hello"
+python -m fluctlight.cli generate --checkpoint checkpoints/last.ckpt --input-text "1+"
 ```
 
-4. Run the interactive cycling demo:
+4. Run the interactive cycling demo (which may collapse to token 0):
 ```bash
 python examples/test_cycling.py
 ```
