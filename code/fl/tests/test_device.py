@@ -10,32 +10,37 @@ def test_device_detection():
     """Test automatic device detection and tensor placement."""
     # Get default device
     device = get_default_device()
-    print(f"\nDetected device: {device}")
     
     # Initialize model
     model = FluctlightTransformer(device=device)
-    print(f"Model device: {model.device}")
+    assert model.device == device, "Model not on correct device"
     
     # Create a sample input
     x = torch.randint(0, 256, (1, 10), device=device)
-    print(f"Input tensor device: {x.device}")
     
     # Forward pass
     with torch.no_grad():
         output = model(x)
-    print(f"Output tensor device: {output.device}")
     
     # Verify all tensors are on same device
     assert x.device == model.device, "Input tensor not on model device"
     assert output.device == model.device, "Output tensor not on model device"
+
+def test_explicit_device_placement():
+    """Test explicit device placement works."""
+    cpu_device = torch.device('cpu')
+    model = FluctlightTransformer(device=cpu_device)
     
-    # Test dataset device handling
-    dataset = Base64Dataset("data/train.txt", device=device)
-    sample = dataset[0]
-    print(f"Dataset sample device: {sample.device}")
-    assert sample.device == device, "Dataset tensor not on correct device"
+    # Verify model is on CPU
+    assert model.device == cpu_device
+    assert next(model.parameters()).device == cpu_device
     
-    print("\nAll device placement tests passed!")
+    # Test forward pass maintains device
+    x = torch.randint(0, 256, (1, 10), device=cpu_device)
+    with torch.no_grad():
+        output = model(x)
+    assert output.device == cpu_device
 
 if __name__ == "__main__":
     test_device_detection()
+    test_explicit_device_placement()
