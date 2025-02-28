@@ -72,7 +72,8 @@ def train(
     output_dir: str,
     batch_size: int = 32,
     max_epochs: int = 100,
-    learning_rate: float = 1e-3
+    learning_rate: float = 1e-3,
+    gradient_clip_val: float = 1.0
 ):
     """
     Train the model on Base64-encoded text data.
@@ -90,6 +91,7 @@ def train(
         batch_size: Training batch size
         max_epochs: Maximum number of training epochs
         learning_rate: Initial learning rate
+        gradient_clip_val: Gradient clipping value
     """
     # Create output directory
     output_path = Path(output_dir)
@@ -123,7 +125,8 @@ def train(
         accelerator='auto',
         enable_progress_bar=True,
         enable_model_summary=True,
-        log_every_n_steps=1
+        log_every_n_steps=1,
+        gradient_clip_val=gradient_clip_val
     )
 
     # Train
@@ -176,6 +179,7 @@ def main():
     train_parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     train_parser.add_argument("--max-epochs", type=int, default=100, help="Maximum epochs")
     train_parser.add_argument("--learning-rate", type=float, default=1e-3, help="Learning rate")
+    train_parser.add_argument("--gradient-clip-val", type=float, default=1.0, help="Gradient clipping value")
 
     # Generate command
     generate_parser = subparsers.add_parser("generate", help="Generate text")
@@ -193,7 +197,8 @@ def main():
             args.output_dir,
             args.batch_size,
             args.max_epochs,
-            args.learning_rate
+            args.learning_rate,
+            args.gradient_clip_val
         )
     elif args.command == "generate":
         generate(

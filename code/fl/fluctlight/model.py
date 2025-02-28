@@ -49,6 +49,7 @@ class FluctlightTransformer(pl.LightningModule):
         n_layers: int = 2,
         d_ff: int = 8,
         learning_rate: float = 1e-3,
+        weight_decay: float = 0.0,
         device: Optional[torch.device] = None
     ):
         super().__init__()
@@ -58,6 +59,7 @@ class FluctlightTransformer(pl.LightningModule):
         self.n_heads = n_heads
         self.head_dim = d_model // n_heads
         self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
         
         # Compute dynamic dropout rate based on model size
         # Small models (pre-Origami expansions) should neglibibly drop tokens
@@ -101,38 +103,56 @@ class FluctlightTransformer(pl.LightningModule):
         return self._device
     
     def _apply_rope(
-        self, 
-        q: torch.Tensor, 
-        k: torch.Tensor, 
-        v: torch.Tensor,  # Now correctly modifying V
-        seq_len: int
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        seq_len: int,
+        v_scale: float = 0.0  # Parameter controlling how much RoPE to apply to V (0.0-1.0)
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Apply Rotary Positional Embedding (RoPE) to Q, K, and V."""
-
+        """
+        Apply Rotary Positional Embedding (RoPE) to Q, K, and optionally V with scaling.
+        
+        Args:
+            q, k, v: Query, key and value tensors
+            seq_len: Sequence length
+            v_scale: How much RoPE to apply to value vectors (0.0 = none, 1.0 = full)
+        """
         # Generate position-dependent rotation angles
         pos = torch.arange(seq_len, device=self.device, dtype=torch.float).unsqueeze(1)
         dim_idx = torch.arange(self.head_dim // 2, device=self.device, dtype=torch.float)
         angle_rates = 1.0 / (10000 ** (2 * dim_idx / self.d_model))
         angles = pos * angle_rates
-
+        
         # Prepare rotation matrices
         cos = torch.cos(angles).unsqueeze(0).unsqueeze(0)
         sin = torch.sin(angles).unsqueeze(0).unsqueeze(0)
-
+        
         def apply_rotary(tensor):
             """Applies RoPE transformation safely, checking dimensions."""
             if tensor.shape[-1] % 2 != 0:
                 raise ValueError(f"RoPE requires an even last dimension, but got shape {tensor.shape}")
-
+            
             even, odd = tensor[..., 0::2], tensor[..., 1::2]
             rotated_even = even * cos - odd * sin
             rotated_odd = even * sin + odd * cos
-            return torch.cat([rotated_even, rotated_odd], dim=-1)  # Concatenate correctly
-
-        # Apply RoPE to Q, K, and V
-        q, k, v = apply_rotary(q), apply_rotary(k), apply_rotary(v)
-
-        return q, k, v 
+            return torch.cat([rotated_even, rotated_odd], dim=-1)
+        
+        # Apply RoPE to Q and K
+        q, k = apply_rotary(q), apply_rotary(k)
+        
+        # Apply scaled RoPE to V if v_scale > 0
+        if v_scale > 0:
+            # Store original V
+            v_original = v
+            
+            # Apply rotation to V
+            v_rotated = apply_rotary(v)
+            
+            # Interpolate between original and rotated V based on scale
+            v = v_scale * v_rotated + (1 - v_scale) * v_original
+        
+        return q, k, v
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the Transformer."""
@@ -195,9 +215,13 @@ class FluctlightTransformer(pl.LightningModule):
             ff_out = layer["ff_out"](F.relu(layer["ff_in"](ff_input)))
             ff_out = self.dropout(ff_out)
             h = h + ff_out  # Residual connection
+        
+        # Final layer norm
+        h = nn.LayerNorm(self.d_model).to(self.device)(h)
 
         # Final output projection
         logits = self.output_proj(h)
+        
         return logits
 
     def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
@@ -209,22 +233,24 @@ class FluctlightTransformer(pl.LightningModule):
             target_seq = target_seq.to(self.device)
         else:
             raise ValueError("Expected tuple of (input, target)")
-
-        # Forward pass and loss computation
+            
+        # Forward pass
         logits = self(input_seq)  # shape: [B, seq_len, vocab_size]
         
-        # Shift target sequence by one position (predict next token)
-        # Target becomes [1:] and we predict using input [:1]
+        # For next token prediction, we need to align:
+        # - logits: remove last position since we don't have a target for it
+        # - target_seq: remove first position since it's what we're conditioning on
         logits = logits[:, :-1, :]  # Remove last position prediction
         target_seq = target_seq[:, 1:]  # Remove first position target
-    
-        # Forward pass and loss computation
+        
+        # Compute loss (flattening both tensors to 2D)
         loss = F.cross_entropy(
-            logits.contiguous().view(-1, self.vocab_size),
-            target_seq.contiguous().view(-1),
-            ignore_index=-100
+            logits.reshape(-1, self.vocab_size),  # Using reshape is slightly more efficient than view+contiguous
+            target_seq.reshape(-1),  # Using reshape avoids potential contiguous issues
+            ignore_index=-100,
+            label_smoothing=0.1
         )
-
+        
         self.log("train_loss", loss, prog_bar=True)
         return loss
 
@@ -237,24 +263,24 @@ class FluctlightTransformer(pl.LightningModule):
             target_seq = target_seq.to(self.device)
         else:
             raise ValueError("Expected tuple of (input, target)")
+            
+        # Forward pass
+        logits = self(input_seq)  # shape: [B, seq_len, vocab_size]
         
-        # Forward pass and loss computation
-        logits = self(input_seq)
+        # For next token prediction alignment
+        logits = logits[:, :-1, :]  # Remove last position prediction
+        target_seq = target_seq[:, 1:]  # Remove first position target
         
-        # Shift target sequence by one position
-        logits = logits[:, :-1, :]
-        target_seq = target_seq[:, 1:]
-
-        # Forward pass and loss computation
+        # Compute validation loss
         val_loss = F.cross_entropy(
-            logits.contiguous().view(-1, self.vocab_size),
-            target_seq.contiguous().view(-1),
-            ignore_index=-100
+            logits.reshape(-1, self.vocab_size),
+            target_seq.reshape(-1),
+            ignore_index=-100  # Added to match training (if needed)
         )
-
+        
         self.log("val_loss", val_loss, prog_bar=True)
         return val_loss
 
     def configure_optimizers(self):
         """Configure optimizer."""
-        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        return torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)

@@ -79,7 +79,8 @@ def generate_continuation(
             generated.append(next_token.item())
             
             # Ensure input_tokens does not exceed CONTEXT_WINDOW
-            input_tokens = torch.cat([input_tokens, next_token.unsqueeze(0)], dim=1)
+            next_token_reshaped = next_token.view(1, 1)  # Reshape to [1, 1] for batch_size and seq_len
+            input_tokens = torch.cat([input_tokens, next_token_reshaped], dim=1)
             if input_tokens.shape[1] >= MAX_CONTEXT:
                 break  # Stop once the context window is full
 
