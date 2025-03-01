@@ -10,7 +10,7 @@ Key Architecture Points:
 - Embedding Dimension: 4 (compact but effective)
 - Attention Heads: 2 (each head dimension: 2)
 - Feed-forward Dimension: 8 (2x embedding dimension)
-- Context Window: 64 tokens
+- Context Window: 16 tokens
 - Position Encoding: Rotary Positional Embedding (RoPE)
 
 The small dimensions were chosen to demonstrate Transformer concepts while remaining
@@ -19,6 +19,7 @@ patterns in byte-level encoded text.
 """
 
 import math
+import numpy as np
 from typing import Optional, Tuple
 
 import torch
@@ -50,6 +51,7 @@ class FluctlightTransformer(pl.LightningModule):
         d_ff: int = 8,
         learning_rate: float = 1e-3,
         weight_decay: float = 0.0,
+        context_window: Optional[int] = None,
         device: Optional[torch.device] = None
     ):
         super().__init__()
@@ -57,15 +59,17 @@ class FluctlightTransformer(pl.LightningModule):
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.n_heads = n_heads
+        self.n_layers = n_layers
         self.head_dim = d_model // n_heads
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
+        self.context_window = context_window or self.predict_context_window()
         
         # Compute dynamic dropout rate based on model size
         # Small models (pre-Origami expansions) should neglibibly drop tokens
         # Large models (post-Origami expansions) should drop more tokens
         # but cap at 10% to avoid over-dropping
-        self.dropout_rate = min(0.1, 0.5 * (self.d_model / 256))
+        self.dropout_rate = FluctlightTransformer.dropout_rate(self.d_model)
         self.dropout = nn.Dropout(self.dropout_rate)
 
         # Set device (use passed device or detect optimal device)
@@ -102,6 +106,19 @@ class FluctlightTransformer(pl.LightningModule):
         """Get the device the model is on."""
         return self._device
     
+    def predict_context_window(self) -> int:
+        """
+        Predicts the minimal viable context window for the transformer model.
+
+        This is only a rough estimate and may differ from calculations such as GPT-2,
+        where we might estimate 3,072 tokens but they actually use 1,024.
+
+        Returns:
+            int: The estimated optimal context length.
+        """
+        
+        return max(16, (self.d_model * self.n_layers) // self.n_heads)
+    
     def _apply_rope(
         self,
         q: torch.Tensor,
@@ -118,6 +135,10 @@ class FluctlightTransformer(pl.LightningModule):
             seq_len: Sequence length
             v_scale: How much RoPE to apply to value vectors (0.0 = none, 1.0 = full)
         """
+        
+        if self.d_model % self.n_heads != 0:
+            raise ValueError("d_model must be divisible by n_heads for correct attention splitting.")
+
         # Generate position-dependent rotation angles
         pos = torch.arange(seq_len, device=self.device, dtype=torch.float).unsqueeze(1)
         dim_idx = torch.arange(self.head_dim // 2, device=self.device, dtype=torch.float)
@@ -153,6 +174,12 @@ class FluctlightTransformer(pl.LightningModule):
             v = v_scale * v_rotated + (1 - v_scale) * v_original
         
         return q, k, v
+    
+    # The dropout_rate uses a sigmoid function to smoothly transition from
+    # d_min to d_max as d_model increases in size
+    @staticmethod
+    def dropout_rate(d_model, d_min=0.01, d_max=0.5, k=0.001, midpoint=512):
+        return d_min + (d_max - d_min) / (1 + np.exp(-k * (d_model - midpoint)))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the Transformer."""
@@ -160,10 +187,9 @@ class FluctlightTransformer(pl.LightningModule):
         x = x.to(self.device)
         
         # Enforce context window limit
-        MAX_CONTEXT = 64
-        AVAILABLE_CONTEXT = MAX_CONTEXT - 1
-        if x.shape[1] > AVAILABLE_CONTEXT:
-            x = x[:, -AVAILABLE_CONTEXT:]  # Take only the trailing tokens
+        available_context = self.context_window - 1
+        if x.shape[1] > available_context:
+            x = x[:, -available_context:]  # Take only the trailing tokens
         
         B, seq_len = x.shape
 
@@ -186,7 +212,7 @@ class FluctlightTransformer(pl.LightningModule):
             v = v.view(B, seq_len, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
 
             # Apply RoPE to Q and K
-            q, k, v = self._apply_rope(q, k, v, seq_len)
+            q, k, v = self._apply_rope(q, k, v, seq_len, 1.0)
 
             # Compute attention scores
             attn_scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
@@ -247,7 +273,6 @@ class FluctlightTransformer(pl.LightningModule):
         loss = F.cross_entropy(
             logits.reshape(-1, self.vocab_size),  # Using reshape is slightly more efficient than view+contiguous
             target_seq.reshape(-1),  # Using reshape avoids potential contiguous issues
-            ignore_index=-100,
             label_smoothing=0.1
         )
         

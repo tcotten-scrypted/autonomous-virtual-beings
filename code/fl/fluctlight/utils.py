@@ -8,7 +8,7 @@ This module provides utilities for:
 """
 
 import base64
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
 import torch
 
@@ -35,7 +35,7 @@ def decode_base64_pair(encoded: str) -> Tuple[str, str]:
 def generate_continuation(
     model: torch.nn.Module,
     input_str: str,
-    max_length: int = 100,
+    max_length: Optional[int] = None,
     temperature: float = 1.0
 ) -> str:
     """
@@ -52,6 +52,8 @@ def generate_continuation(
         Generated continuation string
     """
     model.eval()
+    
+    max_length = max_length or max(1, model.context_window - len(input_str))
 
     # Get the model's device
     device = next(model.parameters()).device
@@ -59,9 +61,6 @@ def generate_continuation(
     # Convert input string to token tensor on the correct device
     input_tokens = torch.tensor([ord(c) for c in input_str], dtype=torch.long, device=device)
     input_tokens = input_tokens.unsqueeze(0)  # Add batch dimension
-
-    # Maximum allowed sequence length (context window)
-    MAX_CONTEXT = 64
     
     # Generate tokens autoregressively
     generated = []
@@ -81,8 +80,10 @@ def generate_continuation(
             # Ensure input_tokens does not exceed CONTEXT_WINDOW
             next_token_reshaped = next_token.view(1, 1)  # Reshape to [1, 1] for batch_size and seq_len
             input_tokens = torch.cat([input_tokens, next_token_reshaped], dim=1)
-            if input_tokens.shape[1] >= MAX_CONTEXT:
-                break  # Stop once the context window is full
+            
+            # Truncate oldest tokens, preserving the last `context_window` tokens
+            if input_tokens.shape[1] > model.context_window:
+                input_tokens = input_tokens[:, -model.context_window:]
 
     # Convert tokens back to string
     return ''.join(chr(t) for t in generated)

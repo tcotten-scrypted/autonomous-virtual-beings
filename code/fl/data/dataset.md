@@ -4,7 +4,7 @@ This directory stores training and validation data files used by the model. Thes
 
 Sample files:
 ```
-sample-train.txt  # Training data based on simple addition problems: 1+1=\t2
+sample-train.txt  # Training data based on simple capitalization of 8 characters: abcdefgh -> ABCDEFGH
 sample-val.txt    # Validations
 ```
 

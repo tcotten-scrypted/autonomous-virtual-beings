@@ -90,11 +90,12 @@ class Base64Dataset(Dataset):
 
 def create_dataloader(
     dataset: Dataset,
+    context_window: int,
     batch_size: int = 32,
     shuffle: bool = False,
     num_workers: int = 0,
     pin_memory: bool = False,
-    persistent_workers: bool = False
+    persistent_workers: bool = False,
 ) -> DataLoader:
     """
     Create a DataLoader for the dataset.
@@ -115,12 +116,12 @@ def create_dataloader(
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
-        collate_fn=collate_sequences,
+        collate_fn=lambda batch: collate_sequences(batch, context_window),
         pin_memory=pin_memory,
         persistent_workers=persistent_workers
     )
 
-def collate_sequences(batch: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor]:
+def collate_sequences(batch: List[Tuple[torch.Tensor, torch.Tensor]], context_window: int) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Collate function for padding sequences to the same length, respecting max context window.
     Total sequence length (input + target shift) should not exceed MAX_CONTEXT.
@@ -128,20 +129,19 @@ def collate_sequences(batch: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[t
     inputs, targets = zip(*batch)
     
     # Apply context window limit
-    MAX_CONTEXT = 64
-    AVAILABLE_CONTEXT = MAX_CONTEXT - 1
+    available_context = context_window - 1
     
     # Ensure total sequence length doesn't exceed MAX_CONTEXT
     combined_inputs = []
     combined_targets = []
     for inp, tgt in zip(inputs, targets):
-        if inp.size(0) > AVAILABLE_CONTEXT:
-            combined_inputs.append(inp[-AVAILABLE_CONTEXT:])
+        if inp.size(0) > available_context:
+            combined_inputs.append(inp[-available_context:])
         else:
             combined_inputs.append(inp)
             
-        if tgt.size(0) > AVAILABLE_CONTEXT:
-            combined_targets.append(tgt[-AVAILABLE_CONTEXT:])
+        if tgt.size(0) > available_context:
+            combined_targets.append(tgt[-available_context:])
         else:
             combined_targets.append(tgt)
     

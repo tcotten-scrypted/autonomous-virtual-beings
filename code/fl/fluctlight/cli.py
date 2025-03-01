@@ -73,7 +73,8 @@ def train(
     batch_size: int = 32,
     max_epochs: int = 100,
     learning_rate: float = 1e-3,
-    gradient_clip_val: float = 1.0
+    gradient_clip_val: float = 1.0,
+    vocab_size: int = 256
 ):
     """
     Train the model on Base64-encoded text data.
@@ -92,20 +93,21 @@ def train(
         max_epochs: Maximum number of training epochs
         learning_rate: Initial learning rate
         gradient_clip_val: Gradient clipping value
+        vocab_size: Size of the vocabulary
     """
     # Create output directory
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+    
+    # Create model
+    model = FluctlightTransformer(vocab_size=vocab_size, learning_rate=learning_rate)
 
     # Prepare data
     train_dataset = Base64Dataset(train_file, prepend=generate_seed_data())
     val_dataset = Base64Dataset(val_file)
 
-    train_loader = create_dataloader(train_dataset, batch_size=batch_size)
-    val_loader = create_dataloader(val_dataset, batch_size=batch_size)
-
-    # Create model
-    model = FluctlightTransformer(learning_rate=learning_rate)
+    train_loader = create_dataloader(train_dataset, model.context_window, batch_size=batch_size)
+    val_loader = create_dataloader(val_dataset, model.context_window, batch_size=batch_size)
 
     # Setup logger
     logger = TensorBoardLogger("lightning_logs", name="transformer")
@@ -135,8 +137,8 @@ def train(
 def generate(
     checkpoint_path: str,
     input_text: str,
-    max_length: int = 100,
-    temperature: float = 1.0
+    max_length: Optional[int] = None,
+    temperature: float = 0.8
 ):
     """
     Generate text continuation using a trained model.
@@ -180,12 +182,13 @@ def main():
     train_parser.add_argument("--max-epochs", type=int, default=100, help="Maximum epochs")
     train_parser.add_argument("--learning-rate", type=float, default=1e-3, help="Learning rate")
     train_parser.add_argument("--gradient-clip-val", type=float, default=1.0, help="Gradient clipping value")
+    train_parser.add_argument("--vocab-size", type=int, default=256, help="Vocabulary size")
 
     # Generate command
     generate_parser = subparsers.add_parser("generate", help="Generate text")
     generate_parser.add_argument("--checkpoint", required=True, help="Model checkpoint path")
     generate_parser.add_argument("--input-text", required=True, help="Input text")
-    generate_parser.add_argument("--max-length", type=int, default=100, help="Maximum length")
+    generate_parser.add_argument("--max-length", type=int, default=None, help="Maximum length")
     generate_parser.add_argument("--temperature", type=float, default=1.0, help="Sampling temperature")
 
     args = parser.parse_args()
@@ -198,7 +201,8 @@ def main():
             args.batch_size,
             args.max_epochs,
             args.learning_rate,
-            args.gradient_clip_val
+            args.gradient_clip_val,
+            args.vocab_size
         )
     elif args.command == "generate":
         generate(

@@ -282,24 +282,38 @@ def main():
                         dtype=torch.long,
                         device=device
                     ).unsqueeze(0)
+                    
+                                        # Define the chunk size for context sliding
+                    chunk_size = max(1, min(model.context_window // 2, total_tokens - len(raw_text)))
+                    # Ensure we don't exceed context size while sliding
+                    input_sequence = raw_text[-chunk_size:] if len(raw_text) > chunk_size else raw_text
 
                     # Generate next token using temp and top_k=10
                     with torch.no_grad():
-                        logits = model(input_tokens)      
-                           
-                        next_token_logits = logits[0, -1, :]
-                        next_token_logits = next_token_logits / temperature
+                        logits = model(torch.tensor(
+                            [min(ord(c), 255) for c in input_sequence],
+                            dtype=torch.long,
+                            device=device
+                        ).unsqueeze(0))
+
+                        next_token_logits = logits[0, -1, :] / temperature
 
                         top_values, top_indices = torch.topk(next_token_logits, top_k)
                         top_probs = torch.softmax(top_values, dim=-1)
-    
+
                         next_token_id = torch.multinomial(top_probs, num_samples=1)
                         next_token = top_indices[next_token_id]
 
-                    # Convert to character (do not filter for generation)
+                    # Convert to character
                     next_char = chr(min(next_token.item(), 255))
-                    # Append the new token to the raw text
+
+                    # Append to rolling context
                     raw_text += next_char
+
+                    # Trim raw_text to maintain context chunking
+                    if len(raw_text) > total_tokens:
+                        raw_text = raw_text[-total_tokens:]
+                        
                     total_tokens += 1
                     iterations += 1
                     interval_tokens.append(next_char)
