@@ -35,8 +35,8 @@ The Fluctlight model uses the following configuration:
 - Hidden Dimension: 4
 - Number of Heads: 2
 - Number of Layers: 2
-- Head Dimension: 2
-- Context Window: 64 tokens
+- Head Dimension: 8
+- Context Window: 16 tokens
 - Embedding: Rotary Positional Embedding (RoPE) across Q, K, and V (yes, I know the latter is unusual)
 
 See the architecture diagrams in `docs/` for detailed visualization.

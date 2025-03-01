@@ -58,7 +58,7 @@ def format_stats(
     window_sizes: List[int],
     iterations: int,
     temperature: float = 0.8,
-    max_context: int = 64,
+    max_context: int = 16,
     device: Optional[torch.device] = None
 ) -> Text:
     """Format statistics for display."""

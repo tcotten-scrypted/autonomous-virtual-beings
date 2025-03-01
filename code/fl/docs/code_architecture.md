@@ -38,7 +38,7 @@ The main model implementation with the following architecture:
 - Embedding Dimension: 4 (compact but effective)
 - Attention Heads: 2 (each head dimension: 2)
 - Feed-forward Dimension: 8 (2x embedding dimension)
-- Context Window: 64 tokens
+- Context Window: 16 tokens
 - Position Encoding: Rotary Positional Embedding (RoPE)
 
 Key features:

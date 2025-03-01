@@ -42,7 +42,7 @@ Below is a Mermaid diagram illustrating the model architecture and data flow thr
 flowchart TD
     subgraph Input_Sequence["Input Tokens (bytes)"]
     end
-    Input_Sequence --> ContextLimit["Context Window Limit (64 tokens)"]
+    Input_Sequence --> ContextLimit["Context Window Limit (16 tokens)"]
     ContextLimit --> Embedding["Token Embedding (256 -> 4)"]
     Embedding --> Layer1["Transformer Encoder Layer 1"]
     
@@ -116,7 +116,7 @@ The main model implementation with the following architecture:
 - Embedding Dimension: 4 (compact but effective)
 - Attention Heads: 2 (each head dimension: 2)
 - Feed-forward Dimension: 8 (2x embedding dimension)
-- Context Window: 64 tokens
+- Context Window: 16 tokens
 - Position Encoding: Rotary Positional Embedding (RoPE)
 
 Key features:
