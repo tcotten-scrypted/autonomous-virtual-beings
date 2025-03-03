@@ -36,59 +36,87 @@ def generate_continuation(
     model: torch.nn.Module,
     input_str: str,
     max_length: Optional[int] = None,
-    temperature: float = 1.0
+    temperature: float = 1.0,
+    verbose: bool = False
 ) -> str:
     """
-    Generate text continuation using the trained Transformer model.
-    The function converts input text to byte-level tokens, runs the model
-    autoregessively with temperature sampling, and converts output tokens
-    back to text.
-    Args:
-        model: Trained Transformer model
-        input_str: Input string to continue from
-        max_length: Maximum length of generated sequence
-        temperature: Sampling temperature (higher = more random)
-    Returns:
-        Generated continuation string
+    Generate text continuation with detailed logging.
     """
     model.eval()
     
+    # Determine max length, ensuring it doesn't exceed context window
     max_length = max_length or max(1, model.context_window - len(input_str))
 
     # Get the model's device
     device = next(model.parameters()).device
 
-    # Convert input string to token tensor on the correct device
+    # Convert input string to byte-level tokens
     input_tokens = torch.tensor([ord(c) for c in input_str], dtype=torch.long, device=device)
-    input_tokens = input_tokens.unsqueeze(0)  # Add batch dimension
     
+    # Pad or truncate to full context window
+    context_window = model.context_window
+    if input_tokens.size(0) > context_window:
+        input_tokens = input_tokens[-context_window:]
+    
+    # Pad with zeros if shorter than context window
+    if input_tokens.size(0) < context_window:
+        padding = torch.zeros(context_window - input_tokens.size(0), 
+                               dtype=torch.long, 
+                               device=device)
+        input_tokens = torch.cat([padding, input_tokens])
+    
+    # Ensure batch dimension
+    input_tokens = input_tokens.unsqueeze(0)
+    
+    if verbose:
+        print("\n--- Generation Debugging ---")
+        print(f"Input String: {input_str}")
+        print(f"Input Tokens (decimal): {input_tokens.tolist()[0]}")
+        print(f"Input Tokens (chars):   {[chr(t) for t in input_tokens.tolist()[0]]}")
+        print(f"Context Window: {context_window}")
+        print(f"Temperature: {temperature}")
+
     # Generate tokens autoregressively
     generated = []
     with torch.no_grad():
-        for _ in range(max_length):
-            # Get model predictions
+        for step in range(max_length):
+            # Get model predictions for entire input
             logits = model(input_tokens)
             
-            # Normalize logits before softmax to prevent extreme probability imbalances
+            # Focus on the last token's prediction
             next_token_logits = logits[0, -1, :]
-            next_token_logits = next_token_logits - next_token_logits.max()  # Subtract max value for numerical stability
+            
+            # Normalize logits
+            next_token_logits = next_token_logits - next_token_logits.max()
 
             # Apply temperature scaling
             probs = torch.softmax(next_token_logits / temperature, dim=-1)
 
+            if verbose:
+                print(f"\nGeneration Step {step}:")
+                print("Top 10 token probabilities:")
+                top_probs, top_indices = torch.topk(probs, 10)
+                for p, idx in zip(top_probs.tolist(), top_indices.tolist()):
+                    print(f"  Token {idx} ('{chr(idx) if 32 <= idx <= 126 else '?'}': {p:.4f}")
+
             # Sample next token
             next_token = torch.multinomial(probs, num_samples=1)
 
-            # Append to sequence (ensure next_token is on the correct device)
+            # Append to generated sequence
             generated.append(next_token.item())
             
-            # Ensure input_tokens does not exceed CONTEXT_WINDOW
-            next_token_reshaped = next_token.view(1, 1)  # Reshape to [1, 1] for batch_size and seq_len
-            input_tokens = torch.cat([input_tokens, next_token_reshaped], dim=1)
+            if verbose:
+                print(f"  Selected Token: {next_token.item()} ('{chr(next_token.item()) if 32 <= next_token.item() <= 126 else '?'}')")
             
-            # Truncate oldest tokens, preserving the last `context_window` tokens
-            if input_tokens.shape[1] > model.context_window:
-                input_tokens = input_tokens[:, -model.context_window:]
+            # Update input tokens, rolling the context window
+            input_tokens = torch.cat([input_tokens[:, 1:], next_token.view(1, 1)], dim=1)
 
     # Convert tokens back to string
-    return ''.join(chr(t) for t in generated)
+    generated_str = ''.join(chr(t) for t in generated)
+    
+    if verbose:
+        print("\nGeneration Result:")
+        print(f"Generated String: {generated_str}")
+        print("--- End of Generation Debugging ---\n")
+
+    return generated_str

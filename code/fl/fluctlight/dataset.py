@@ -128,39 +128,21 @@ def collate_sequences(batch: List[Tuple[torch.Tensor, torch.Tensor]], context_wi
     """
     inputs, targets = zip(*batch)
     
-    # Apply context window limit
-    available_context = context_window - 1
-    
-    # Ensure total sequence length doesn't exceed MAX_CONTEXT
-    combined_inputs = []
-    combined_targets = []
-    for inp, tgt in zip(inputs, targets):
-        if inp.size(0) > available_context:
-            combined_inputs.append(inp[-available_context:])
-        else:
-            combined_inputs.append(inp)
-            
-        if tgt.size(0) > available_context:
-            combined_targets.append(tgt[-available_context:])
-        else:
-            combined_targets.append(tgt)
-    
-    # Find max length that allows for shifting
-    max_len = max(max(seq.size(0) for seq in combined_inputs), 
-                  max(seq.size(0) for seq in combined_targets))
-    
     # Get device from the first tensor
     device = inputs[0].device if inputs else torch.device('cpu')
     
-    # Create padding tensors
-    input_padded = torch.full((len(inputs), max_len), 0, dtype=torch.long, device=device)
-    target_padded = torch.full((len(targets), max_len), 0, dtype=torch.long, device=device)
+    # Create padding tensors with the context window size
+    input_padded = torch.zeros((len(inputs), context_window), dtype=torch.long, device=device)
+    target_padded = torch.zeros((len(inputs), context_window), dtype=torch.long, device=device)
     
-    # Fill tensors
-    for i, seq in enumerate(combined_inputs):
-        input_padded[i, :seq.size(0)] = seq
+    # Fill tensors, right-aligned with zero padding
+    for i, (inp, tgt) in enumerate(zip(inputs, targets)):
+        # Truncate or use full input based on context window
+        input_seq = inp[-context_window:] if inp.size(0) > context_window else inp
+        target_seq = tgt[-context_window:] if tgt.size(0) > context_window else tgt
         
-    for i, seq in enumerate(combined_targets):
-        target_padded[i, :seq.size(0)] = seq
+        # Right-align the sequences
+        input_padded[i, -input_seq.size(0):] = input_seq
+        target_padded[i, -target_seq.size(0):] = target_seq
     
     return input_padded, target_padded

@@ -258,9 +258,16 @@ class FluctlightTransformer(pl.LightningModule):
         norm_scale = self.calculate_norm_scale_factor()
         
         # Enforce context window limit
-        available_context = self.context_window - 1
-        if x.shape[1] > available_context:
-            x = x[:, -available_context:]  # Take only the trailing tokens
+        B, seq_len = x.shape
+        if seq_len < self.context_window:
+            # Create padded tensor filled with NUL tokens ()
+            padded_x = torch.zeros((B, self.context_window), 
+                                    dtype=x.dtype, 
+                                    device=x.device)
+            padded_x[:, -seq_len:] = x
+            x = padded_x
+        else:
+            x = x[:, -self.context_window:]  # Take last context_window tokens
         
         B, seq_len = x.shape
 
@@ -332,58 +339,119 @@ class FluctlightTransformer(pl.LightningModule):
         return logits
 
     def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
-        """Training step with device handling."""
         # Move batch to correct device and handle format
         if isinstance(batch, (tuple, list)):
-            input_seq, target_seq = batch  # Correctly unpack input and target
+            input_seq, target_seq = batch
             input_seq = input_seq.to(self.device)
             target_seq = target_seq.to(self.device)
         else:
             raise ValueError("Expected tuple of (input, target)")
-            
+        
         # Forward pass
         logits = self(input_seq)  # shape: [B, seq_len, vocab_size]
         
-        # NO SLICING: Input and Target are already aligned for next token prediction
-        
-        # Compute loss (flattening both tensors to 2D)
+        # Compute loss with increased label smoothing
         loss = F.cross_entropy(
-            logits.reshape(-1, self.vocab_size),  # Using reshape is slightly more efficient than view+contiguous
-            target_seq.reshape(-1),  # Using reshape avoids potential contiguous issues
-            label_smoothing=0.00
+            logits.reshape(-1, self.vocab_size),
+            target_seq.reshape(-1),
+            label_smoothing=0.1
         )
+        
+        # Additional regularization diagnostics
+        with torch.no_grad():
+            # Compute entropy of predictions to check diversity
+            pred_probs = torch.softmax(logits, dim=-1)
+            entropy = -(pred_probs * torch.log(pred_probs + 1e-10)).sum(dim=-1).mean()
+            
+            # Check prediction diversity
+            unique_preds = torch.unique(logits.argmax(dim=-1)).numel()
+            
+            # Log additional metrics
+            self.log("pred_entropy", entropy, prog_bar=True)
+            self.log("unique_pred_count", unique_preds, prog_bar=True)
+            
+            # Compute some additional diagnostics
+            preds = logits.argmax(dim=-1)
+            correct = (preds == target_seq).float()
+            
+            # Position-wise accuracy
+            pos_accuracies = [
+                (preds[:, pos] == target_seq[:, pos]).float().mean() 
+                for pos in range(target_seq.shape[1])
+            ]
+            
+            #print("\n--- Training Step Diagnostics ---")
+            #print(f"Loss: {loss.item()}")
+            #print(f"Entropy: {entropy.item()}")
+            #print(f"Unique Predictions: {unique_preds}")
+            #print("Position Accuracies:", pos_accuracies)
+            
+            # Print top predictions distribution
+            #top_preds = torch.topk(pred_probs, k=5, dim=-1)
+            #print("\nTop 5 Predictions Distribution:")
+            #for pos in range(logits.shape[1]):
+            #    print(f"  Position {pos}:")
+            #    for idx, prob in zip(top_preds.indices[0, pos], top_preds.values[0, pos]):
+            #        print(f"    Token {idx} ('{chr(idx) if 32 <= idx <= 126 else '?'}': {prob.item():.4f}")
+            #print("--- End Diagnostics ---\n")
         
         self.log("train_loss", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
-        """Validation step with device handling."""
         # Move batch to correct device and handle format
         if isinstance(batch, (tuple, list)):
-            input_seq, target_seq = batch  # Correctly unpack input and target
+            input_seq, target_seq = batch
             input_seq = input_seq.to(self.device)
             target_seq = target_seq.to(self.device)
         else:
             raise ValueError("Expected tuple of (input, target)")
-            
+        
         # Forward pass
         logits = self(input_seq)  # shape: [B, seq_len, vocab_size]
-        
-        # NO SLICING: Input and Target are already aligned for next token prediction
         
         # Compute validation loss
         val_loss = F.cross_entropy(
             logits.reshape(-1, self.vocab_size),
             target_seq.reshape(-1),
-            label_smoothing=0.0
+            label_smoothing=0.1
         )
         
-        correct = (logits.argmax(dim=-1) == target_seq).float().mean()
-        self.log("val_accuracy", correct, prog_bar=True)
+        # Detailed validation diagnostics
+        with torch.no_grad():
+            # Predictions
+            preds = logits.argmax(dim=-1)
+            
+            # Compute detailed accuracy metrics
+            position_accuracy = []
+            token_confusion_count = 0
+            
+            for pos in range(target_seq.shape[1]):
+                # Per-position accuracy
+                pos_correct = (preds[:, pos] == target_seq[:, pos])
+                pos_acc = pos_correct.float().mean()
+                position_accuracy.append(pos_acc.item())
+                
+                # Token-level confusion
+                for pred, true in zip(preds[:, pos], target_seq[:, pos]):
+                    if pred != true:
+                        token_confusion_count += 1
+            
+            # Log average position accuracy
+            avg_position_accuracy = sum(position_accuracy) / len(position_accuracy)
+            
+            self.log("val_avg_position_accuracy", avg_position_accuracy, prog_bar=True)
+            self.log("val_token_confusion_count", token_confusion_count, prog_bar=True)
+        
+        # Compute accuracy for logging
+        correct = (preds == target_seq).float()
+        accuracy = correct.mean()
         
         self.log("val_loss", val_loss, prog_bar=True)
+        self.log("val_accuracy", accuracy, prog_bar=True)
+        
         return val_loss
-
+    
     def configure_optimizers(self):
         """Configure optimizer."""
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
