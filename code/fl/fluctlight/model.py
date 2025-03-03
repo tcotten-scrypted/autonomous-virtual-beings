@@ -344,11 +344,7 @@ class FluctlightTransformer(pl.LightningModule):
         # Forward pass
         logits = self(input_seq)  # shape: [B, seq_len, vocab_size]
         
-        # For next token prediction, we need to align:
-        # - logits: remove last position since we don't have a target for it
-        # - target_seq: remove first position since it's what we're conditioning on
-        logits = logits[:, :-1, :]  # Remove last position prediction
-        target_seq = target_seq[:, 1:]  # Remove first position target
+        # NO SLICING: Input and Target are already aligned for next token prediction
         
         # Compute loss (flattening both tensors to 2D)
         loss = F.cross_entropy(
@@ -373,10 +369,7 @@ class FluctlightTransformer(pl.LightningModule):
         # Forward pass
         logits = self(input_seq)  # shape: [B, seq_len, vocab_size]
         
-        # For next token prediction alignment
-        logits = logits[:, :-1, :]  # Remove last position prediction
-        target_seq = target_seq[:, 1:]  # Remove first position target
-        
+        # NO SLICING: Input and Target are already aligned for next token prediction
         
         # Compute validation loss
         val_loss = F.cross_entropy(
