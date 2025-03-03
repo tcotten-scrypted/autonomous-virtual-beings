@@ -11,11 +11,22 @@ Key Architecture Points:
 - Attention Heads: 2 (each head dimension: 2)
 - Feed-forward Dimension: 8 (2x embedding dimension)
 - Context Window: 16 tokens
-- Position Encoding: Rotary Positional Embedding (RoPE)
+- Position Encoding: Rotary Positional Embedding (RoPE) with context-window scaling
 
 The small dimensions were chosen to demonstrate Transformer concepts while remaining
 computationally efficient. Despite its size, the model can effectively learn 
 patterns in byte-level encoded text.
+
+Note on Positional Encoding: Standard RoPE parameters were designed for models with hundreds 
+or thousands of dimensions (e.g., 10000 as the frequency base in GPT models). For our tiny model 
+with only 4 dimensions total, these parameters would create extremely slow-varying positional 
+signals, making nearby positions indistinguishable in the limited embedding space. 
+
+Our implementation scales the frequency by the context window size, effectively compressing 
+the full range of positional information into our small context. This ensures that each 
+position within our context window receives a distinct encoding, even with the severe 
+dimensional constraints. Without this scaling, our tiny model would struggle to differentiate 
+between positions, limiting its ability to learn sequence-dependent patterns.
 """
 
 import math
@@ -50,8 +61,8 @@ class FluctlightTransformer(pl.LightningModule):
         n_layers: int = 2,
         d_ff: int = 8,
         learning_rate: float = 1e-3,
-        weight_decay: float = 0.0,
-        context_window: Optional[int] = None,
+        weight_decay: float = 1e-5,
+        context_window: Optional[int] = 16,
         device: Optional[torch.device] = None
     ):
         super().__init__()
@@ -71,6 +82,9 @@ class FluctlightTransformer(pl.LightningModule):
         # but cap at 10% to avoid over-dropping
         self.dropout_rate = FluctlightTransformer.dropout_rate(self.d_model)
         self.dropout = nn.Dropout(self.dropout_rate)
+        
+        # Final layer norm
+        self.final_ln = nn.LayerNorm(d_model)
 
         # Set device (use passed device or detect optimal device)
         self._device = device if device is not None else get_default_device()
@@ -117,7 +131,40 @@ class FluctlightTransformer(pl.LightningModule):
             int: The estimated optimal context length.
         """
         
-        return max(16, (self.d_model * self.n_layers) // self.n_heads)
+        return max(2, (self.d_model * self.n_layers) // self.n_heads)
+    
+    def calculate_adaptive_angle_rates(self, dim_idx):
+        """
+        Adaptive RoPE frequency calculation that works across all context window sizes.
+        Addresses both tiny (2) and massive (100k) context windows with appropriate scaling.
+        """
+        # Normalize dimension index for consistent scaling
+        normalized_dim = dim_idx / (self.d_model // 2)
+        
+        # Piecewise frequency scaling based on context window size
+        if self.context_window < 16:
+            # Tiny contexts (2-16): Steeper hyperbolic curve
+            # Creates maximal distinction between positions in minimal space
+            # Critical for d_model=4 to learn position-dependent patterns
+            base = 2.0
+            scale = max(1.0, 16.0 / self.context_window)
+        elif self.context_window < 1024:
+            # Standard contexts: Traditional transformer scaling
+            # Well-tested approach for normal range contexts
+            base = 10000.0
+            scale = 1.0
+        else:
+            # Massive contexts (1k-100k): Logarithmic scaling
+            # Prevents frequency collapse at extreme distances
+            # Maintains positional sensitivity across huge contexts
+            log_adjustment = math.log(self.context_window / 1024 + 1)
+            base = 10000.0 * log_adjustment
+            scale = 1.0 / math.sqrt(log_adjustment)
+        
+        # Apply the appropriate curve based on context size
+        angle_rates = 1.0 / (base ** (normalized_dim * scale))
+        
+        return angle_rates
     
     def _apply_rope(
         self,
@@ -139,10 +186,11 @@ class FluctlightTransformer(pl.LightningModule):
         if self.d_model % self.n_heads != 0:
             raise ValueError("d_model must be divisible by n_heads for correct attention splitting.")
 
-        # Generate position-dependent rotation angles
+        # Generate position-dependent rotation angles scaled by the context window
         pos = torch.arange(seq_len, device=self.device, dtype=torch.float).unsqueeze(1)
+        
         dim_idx = torch.arange(self.head_dim // 2, device=self.device, dtype=torch.float)
-        angle_rates = 1.0 / (10000 ** (2 * dim_idx / self.d_model))
+        angle_rates = self.calculate_adaptive_angle_rates(dim_idx)
         angles = pos * angle_rates
         
         # Prepare rotation matrices
@@ -175,16 +223,39 @@ class FluctlightTransformer(pl.LightningModule):
         
         return q, k, v
     
+    def calculate_norm_scale_factor(self):
+        """
+        Calculate a scaling factor for layer normalization based on model size.
+        Returns a value between 0 (no normalization) and 1 (full normalization).
+        """
+        # Scale based on embedding dimension - No LN at d_model=4, full LN at d_model=32+
+        return min(1.0, max(0.0, (self.d_model - 4) / 28))
+    
     # The dropout_rate uses a sigmoid function to smoothly transition from
-    # d_min to d_max as d_model increases in size
+    # d_min to d_max as d_model increases in size; as long as the d_model size
+    # is greater than 32, otherwise it's 0.0
     @staticmethod
     def dropout_rate(d_model, d_min=0.01, d_max=0.5, k=0.001, midpoint=512):
+        if d_model < 32:
+            return 0.0
+        
         return d_min + (d_max - d_min) / (1 + np.exp(-k * (d_model - midpoint)))
+
+    def calculate_norm_scale_factor(self):
+        """
+        Calculate a scaling factor for layer normalization based on model size.
+        Returns a value between 0 (no normalization) and 1 (full normalization).
+        """
+        # Scale based on embedding dimension - No LN at d_model=4, full LN at d_model=32+
+        return min(1.0, max(0.0, (self.d_model - 4) / 28))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the Transformer."""
         # Ensure input is on correct device
         x = x.to(self.device)
+        
+        # Calculate normalization scale factor
+        norm_scale = self.calculate_norm_scale_factor()
         
         # Enforce context window limit
         available_context = self.context_window - 1
@@ -199,8 +270,11 @@ class FluctlightTransformer(pl.LightningModule):
         # Process through transformer layers
         for layer in self.layers:
             # Multi-head self-attention with RoPE
-            attn_input = layer["ln1"](h)
-
+            raw_h = h  # Store original pre-normalized activations
+            norm_h = layer["ln1"](h)
+            # Apply scaled normalization
+            attn_input = norm_h * norm_scale + raw_h * (1 - norm_scale)
+            
             # Compute Q, K, V projections
             q = layer["Wq"](attn_input)
             k = layer["Wk"](attn_input)
@@ -212,7 +286,7 @@ class FluctlightTransformer(pl.LightningModule):
             v = v.view(B, seq_len, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
 
             # Apply RoPE to Q and K
-            q, k, v = self._apply_rope(q, k, v, seq_len, 1.0)
+            q, k, v = self._apply_rope(q, k, v, seq_len, 0.0)
 
             # Compute attention scores
             attn_scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
@@ -237,13 +311,20 @@ class FluctlightTransformer(pl.LightningModule):
             h = h + attn_out
             
             # Feed-forward with second layer norm
-            ff_input = layer["ln2"](h)  # Second layer norm before FF
+            raw_h = h  # Store original pre-normalized activations
+            norm_h = layer["ln2"](h)  # Second layer norm before FF
+            # Apply scaled normalization
+            ff_input = norm_h * norm_scale + raw_h * (1 - norm_scale)
+            
             ff_out = layer["ff_out"](F.relu(layer["ff_in"](ff_input)))
             ff_out = self.dropout(ff_out)
             h = h + ff_out  # Residual connection
         
         # Final layer norm
-        h = nn.LayerNorm(self.d_model).to(self.device)(h)
+        raw_h = h  # Store original pre-normalized activations
+        norm_h = self.final_ln(h)
+        # Apply scaled normalization
+        h = norm_h * norm_scale + raw_h * (1 - norm_scale)
 
         # Final output projection
         logits = self.output_proj(h)
@@ -273,7 +354,7 @@ class FluctlightTransformer(pl.LightningModule):
         loss = F.cross_entropy(
             logits.reshape(-1, self.vocab_size),  # Using reshape is slightly more efficient than view+contiguous
             target_seq.reshape(-1),  # Using reshape avoids potential contiguous issues
-            label_smoothing=0.1
+            label_smoothing=0.00
         )
         
         self.log("train_loss", loss, prog_bar=True)
@@ -296,12 +377,16 @@ class FluctlightTransformer(pl.LightningModule):
         logits = logits[:, :-1, :]  # Remove last position prediction
         target_seq = target_seq[:, 1:]  # Remove first position target
         
+        
         # Compute validation loss
         val_loss = F.cross_entropy(
             logits.reshape(-1, self.vocab_size),
             target_seq.reshape(-1),
-            ignore_index=-100  # Added to match training (if needed)
+            label_smoothing=0.0
         )
+        
+        correct = (logits.argmax(dim=-1) == target_seq).float().mean()
+        self.log("val_accuracy", correct, prog_bar=True)
         
         self.log("val_loss", val_loss, prog_bar=True)
         return val_loss

@@ -68,10 +68,15 @@ def generate_continuation(
         for _ in range(max_length):
             # Get model predictions
             logits = model(input_tokens)
-            next_token_logits = logits[0, -1, :] / temperature
+            
+            # Normalize logits before softmax to prevent extreme probability imbalances
+            next_token_logits = logits[0, -1, :]
+            next_token_logits = next_token_logits - next_token_logits.max()  # Subtract max value for numerical stability
 
-            # Sample from softmax distribution
-            probs = torch.softmax(next_token_logits, dim=-1)
+            # Apply temperature scaling
+            probs = torch.softmax(next_token_logits / temperature, dim=-1)
+
+            # Sample next token
             next_token = torch.multinomial(probs, num_samples=1)
 
             # Append to sequence (ensure next_token is on the correct device)
