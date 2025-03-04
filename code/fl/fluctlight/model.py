@@ -62,7 +62,7 @@ class FluctlightTransformer(pl.LightningModule):
         d_ff: int = 8,
         learning_rate: float = 1e-3,
         weight_decay: float = 1e-5,
-        context_window: Optional[int] = 16,
+        context_window: Optional[int] = 64,
         device: Optional[torch.device] = None
     ):
         super().__init__()
@@ -293,7 +293,7 @@ class FluctlightTransformer(pl.LightningModule):
             v = v.view(B, seq_len, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
 
             # Apply RoPE to Q and K
-            q, k, v = self._apply_rope(q, k, v, seq_len, 0.0)
+            q, k, v = self._apply_rope(q, k, v, seq_len, 1.0)
 
             # Compute attention scores
             attn_scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
@@ -367,8 +367,8 @@ class FluctlightTransformer(pl.LightningModule):
             unique_preds = torch.unique(logits.argmax(dim=-1)).numel()
             
             # Log additional metrics
-            self.log("pred_entropy", entropy, prog_bar=True)
-            self.log("unique_pred_count", unique_preds, prog_bar=True)
+            #self.log("pred_entropy", entropy, prog_bar=True)
+            #self.log("unique_pred_count", unique_preds, prog_bar=True)
             
             # Compute some additional diagnostics
             preds = logits.argmax(dim=-1)
@@ -440,8 +440,8 @@ class FluctlightTransformer(pl.LightningModule):
             # Log average position accuracy
             avg_position_accuracy = sum(position_accuracy) / len(position_accuracy)
             
-            self.log("val_avg_position_accuracy", avg_position_accuracy, prog_bar=True)
-            self.log("val_token_confusion_count", token_confusion_count, prog_bar=True)
+            #self.log("val_avg_position_accuracy", avg_position_accuracy, prog_bar=True)
+            #self.log("val_token_confusion_count", token_confusion_count, prog_bar=True)
         
         # Compute accuracy for logging
         correct = (preds == target_seq).float()

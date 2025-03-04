@@ -91,7 +91,7 @@ class Base64Dataset(Dataset):
 def create_dataloader(
     dataset: Dataset,
     context_window: int,
-    batch_size: int = 32,
+    batch_size: int = 16,
     shuffle: bool = False,
     num_workers: int = 0,
     pin_memory: bool = False,
