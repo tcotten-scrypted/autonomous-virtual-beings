@@ -116,7 +116,7 @@ def train(
     checkpoint_callback = ModelCheckpoint(
         dirpath=output_dir,
         filename='transformer-{epoch:02d}-{val_loss:.2f}',
-        save_top_k=3,
+        save_top_k=1,
         monitor='val_loss'
     )
 
@@ -131,7 +131,7 @@ def train(
         gradient_clip_val=gradient_clip_val
     )
 
-    # Train
+    
     trainer.fit(model, train_loader, val_loader)
 
 def generate(
