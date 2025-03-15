@@ -38,7 +38,7 @@ between positions, limiting its ability to learn sequence-dependent patterns.
 
 import math
 import numpy as np
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 
 import torch
 from torch import nn
@@ -86,7 +86,8 @@ class FluctlightTransformer(pl.LightningModule):
         d_ff: int = 8,
         learning_rate: float = 1e-3,
         weight_decay: float = 1e-5,
-        context_window: Optional[int] = 2,
+        context_window: Optional[int] = None,
+        v_scale: float = 0.0,
         device: Optional[torch.device] = None
     ):
         """
@@ -100,7 +101,8 @@ class FluctlightTransformer(pl.LightningModule):
             d_ff: Feed-forward network dimension (default: 8)
             learning_rate: Learning rate for optimization (default: 1e-3)
             weight_decay: Weight decay for regularization (default: 1e-5)
-            context_window: Size of context window (default: 2, minimum viable)
+            context_window: Size of context window (default: None, will be predicted)
+            v_scale: Scale factor for RoPE on value vectors (default: 0.0)
             device: Device to place model on (default: None, auto-detect)
         """
         super().__init__()
@@ -112,7 +114,19 @@ class FluctlightTransformer(pl.LightningModule):
         self.head_dim = d_model // n_heads
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
-        self.context_window = context_window or self.predict_context_window()
+        
+        # Initialize context window with prediction if not provided
+        predicted_context = self.predict_context_window()
+        if context_window is not None:
+            # If context window is provided, ensure it's at least 2
+            self.context_window = max(2, context_window)
+            if self.context_window < predicted_context:
+                print(f"Warning: Provided context window ({self.context_window}) is smaller "
+                      f"than predicted optimal size ({predicted_context})")
+        else:
+            self.context_window = predicted_context
+        
+        self.v_scale = v_scale
         
         # Compute dynamic dropout rate based on model size
         # Small models (pre-Origami expansions) should negligibly drop tokens
@@ -160,22 +174,37 @@ class FluctlightTransformer(pl.LightningModule):
     
     def predict_context_window(self) -> int:
         """
-        Predicts the minimal viable context window for the transformer model.
+        Predicts the optimal context window for the transformer model.
         
-        The default of 2 tokens represents the smallest useful context that can
-        demonstrate pattern learning and extrapolation. Empirical testing shows
-        that even with this minimal context, the model can:
+        The context window is scaled based on model dimensions with a floor of 2 tokens,
+        which represents the smallest useful context that can demonstrate pattern learning
+        and extrapolation. Empirical testing shows that even with this minimal context,
+        the model can:
         1. Learn alternating patterns (e.g., "ababab")
         2. Handle up to 16 active tokens from the vocabulary
         3. Maintain stable training dynamics
         
-        For more complex tasks, larger windows may be needed, calculated as:
-        max(2, (d_model * n_layers) // n_heads)
-
+        For larger models, the context window scales with model dimensions:
+        - Base calculation: (d_model * n_layers) // n_heads
+        - Minimum enforced: 2 tokens
+        - Maximum suggested: d_model * 4 (to maintain computational efficiency)
+        
         Returns:
-            int: The estimated optimal context length, minimum of 2
+            int: The optimal context length, minimum of 2
         """
-        return max(2, (self.d_model * self.n_layers) // self.n_heads)
+        # Calculate base context size from model dimensions
+        base_context = (self.d_model * self.n_layers) // self.n_heads
+        
+        # Enforce minimum of 2 tokens
+        context = max(2, base_context)
+        
+        # Suggest maximum based on model dimension
+        suggested_max = self.d_model * 4
+        if context > suggested_max:
+            print(f"Warning: Large context window ({context}) may impact performance. "
+                  f"Consider using {suggested_max} for better efficiency.")
+        
+        return context
     
     def calculate_adaptive_angle_rates(self, dim_idx):
         """
@@ -343,8 +372,8 @@ class FluctlightTransformer(pl.LightningModule):
             k = k.view(B, seq_len, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
             v = v.view(B, seq_len, self.n_heads, self.head_dim).permute(0, 2, 1, 3)
 
-            # Apply RoPE to Q and K
-            q, k, v = self._apply_rope(q, k, v, seq_len, 1.0)
+            # Apply RoPE to Q and K with stored v_scale
+            q, k, v = self._apply_rope(q, k, v, seq_len, self.v_scale)
 
             # Compute attention scores
             attn_scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
@@ -438,3 +467,62 @@ class FluctlightTransformer(pl.LightningModule):
     def configure_optimizers(self):
         """Configure optimizer."""
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
+
+    def state_dict(self) -> Dict[str, Any]:
+        """
+        Get the model's state dictionary including configuration parameters.
+
+        Returns:
+            Dict containing model state and configuration
+        """
+        state = super().state_dict()
+        # Add configuration parameters
+        state["config"] = {
+            "vocab_size": self.vocab_size,
+            "d_model": self.d_model,
+            "n_heads": self.n_heads,
+            "n_layers": self.n_layers,
+            "learning_rate": self.learning_rate,
+            "weight_decay": self.weight_decay,
+            "context_window": self.context_window,
+            "v_scale": self.v_scale,
+        }
+        return state
+
+    @classmethod
+    def from_pretrained(cls, path: str) -> "FluctlightTransformer":
+        """
+        Load a pretrained model from a file.
+
+        Args:
+            path: Path to the saved model file
+
+        Returns:
+            Loaded FluctlightTransformer instance
+        """
+        state = torch.load(path)
+        config = state.get("config", {})
+        
+        # Get stored context window with a default of None to trigger prediction
+        stored_context = config.get("context_window", None)
+        
+        # Create new model instance with saved config
+        model = cls(
+            vocab_size=config.get("vocab_size", 256),
+            d_model=config.get("d_model", 4),
+            n_heads=config.get("n_heads", 2),
+            n_layers=config.get("n_layers", 2),
+            learning_rate=config.get("learning_rate", 1e-3),
+            weight_decay=config.get("weight_decay", 1e-5),
+            context_window=stored_context,  # Let model predict if not stored
+            v_scale=config.get("v_scale", 0.0),
+        )
+        
+        # Load the state dict
+        model.load_state_dict(state, strict=False)
+        
+        # If context window was stored, ensure it's used (in case prediction was larger)
+        if stored_context is not None:
+            model.context_window = max(2, stored_context)  # Maintain minimum of 2
+        
+        return model
