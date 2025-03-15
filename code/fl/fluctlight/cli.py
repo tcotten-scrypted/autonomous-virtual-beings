@@ -110,7 +110,9 @@ def train(
     max_epochs: int = 100,
     learning_rate: float = 1e-3,
     gradient_clip_val: float = 1.0,
-    vocab_size: int = 256
+    vocab_size: int = 256,
+    context_window: Optional[int] = None,
+    v_scale: float = 0.0
 ) -> None:
     """
     Train the Fluctlight model on Base64-encoded text data.
@@ -122,9 +124,6 @@ def train(
     4. Configuring checkpointing
     5. Training with specified parameters
 
-    The model uses a minimal context window of 2 tokens by default,
-    which is sufficient for learning basic patterns like "ababab".
-
     Args:
         train_file: Path to training data file
         val_file: Path to validation data file
@@ -134,6 +133,8 @@ def train(
         learning_rate: Initial learning rate (default: 1e-3)
         gradient_clip_val: Gradient clipping value (default: 1.0)
         vocab_size: Size of vocabulary (default: 256 for bytes)
+        context_window: Size of context window (default: None, will be predicted)
+        v_scale: Scale factor for RoPE on value vectors (default: 0.0)
         
     Raises:
         FileNotFoundError: If data files don't exist
@@ -144,7 +145,12 @@ def train(
     output_path.mkdir(parents=True, exist_ok=True)
     
     # Create model
-    model = FluctlightTransformer(vocab_size=vocab_size, learning_rate=learning_rate)
+    model = FluctlightTransformer(
+        vocab_size=vocab_size,
+        learning_rate=learning_rate,
+        context_window=context_window,
+        v_scale=v_scale
+    )
 
     # Prepare data
     train_dataset = Base64Dataset(train_file, prepend=generate_seed_data())
@@ -245,6 +251,8 @@ def main() -> None:
     train_parser.add_argument("--learning-rate", type=float, default=1e-3, help="Learning rate")
     train_parser.add_argument("--gradient-clip-val", type=float, default=1.0, help="Gradient clipping value")
     train_parser.add_argument("--vocab-size", type=int, default=256, help="Vocabulary size")
+    train_parser.add_argument("--context-window", type=int, default=None, help="Context window size (default: auto-predict)")
+    train_parser.add_argument("--v-scale", type=float, default=0.0, help="RoPE scale factor for value vectors (default: 0.0)")
 
     # Generate command
     generate_parser = subparsers.add_parser("generate", help="Generate text")
@@ -264,7 +272,9 @@ def main() -> None:
             args.max_epochs,
             args.learning_rate,
             args.gradient_clip_val,
-            args.vocab_size
+            args.vocab_size,
+            args.context_window,
+            args.v_scale
         )
     elif args.command == "generate":
         generate(
