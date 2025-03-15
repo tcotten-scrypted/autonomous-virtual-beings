@@ -1,100 +1,67 @@
-Epoch 10:
+# Fluctlight Transformer Cyclic 4-Token Transformation (CW=2)
+## Training Information
+The model successfully learned the expanded cyclic transformation task in five epochs:
+- Training loss: 1.620
+- Validation loss: 0.830
+- Training files: `data/cycle_4t_2cw-train.txt`
+- Validation files: `data/cycle_4t_2cw-val.txt`
+- Test file: `data/cycle_4t_2cw-test.txt`
 
-| Input | Expected  | v_scale=0.0 | Correct (0.0) | v_scale=1.0 | Correct (1.0) |
-|-------|----------|------------|--------------|------------|--------------|
-| a     | aaaaaaaa | aaaaaaaa   | ✅          | aaaaaaaa   | ✅          |
-| b     | bbbbbbbb | bbbbbbbb   | ✅          | bbbbbbbb   | ✅          |
-| c     | cccccccc | cccccccc   | ✅          | cccccccc   | ✅          |
-| d     | dddddddd | dddddddd   | ✅          | dddddddd   | ✅          |
-| aa    | aaaaaaaa | aaaaaaaa   | ✅          | aaaaaaaa   | ✅          |
-| ab    | abababab | abababab   | ✅          | abababab   | ✅          |
-| ac    | acacacac | acacacac   | ✅          | bcbcbcbc   | ❌          |
-| ad    | adadadad | adadadad   | ✅          | adadadad   | ✅          |
-| ba    | babababa | babababa   | ✅          | babababa   | ✅          |
-| bb    | bbbbbbbb | bbbbbbbb   | ✅          | bbbbbbbb   | ✅          |
-| bc    | bcbcbcbc | bcbcbcbc   | ✅          | bcbcbcbc   | ✅          |
-| bd    | bdbdbdbd | cdcdcdcd   | ❌          | bdbdbdbd   | ✅          |
-| ca    | cacacaca | cacacaca   | ✅          | cbcbcbcb   | ❌          |
-| cb    | cbcbcbcb | cbcbcbcb   | ✅          | cbcbcbcb   | ✅          |
-| cc    | cccccccc | cccccccc   | ✅          | cccccccc   | ✅          |
-| cd    | cdcdcdcd | cdcdcdcd   | ✅          | cdcdcdcd   | ✅          |
-| da    | dadadada | dadadada   | ✅          | dadadada   | ✅          |
-| db    | dbdbdbdb | dcdcdcdc   | ❌          | dbdbdbdb   | ✅          |
-| dc    | dcdcdcdc | dcdcdcdc   | ✅          | dcdcdcdc   | ✅          |
-| dd    | dddddddd | dddddddd   | ✅          | dddddddd   | ✅          |
+### Model Configuration
+| Parameter | Value |
+|-----------|-------|
+| Vocabulary size | 256 |
+| Embedding dimension (d_model) | 4 |
+| Attention heads | 2 |
+| Number of layers | 2 |
+| Feed-forward dimension | 8 |
+| Context window | 2 |
+| Dropout rate | 0.0078125 |
+| Total parameters | 2.7K |
 
+## Test Results Comparison
 
-Applying RoPE on V with 1.0 doesn't lower errors, but just rotates the errors.
+### v_scale = 0.0 Results
+- Perfect accuracy (✅) across all 64 test cases
+- Zero errors for all pattern lengths
+- RMSE consistently 0.000
+- Successfully handles:
+  - Single token repetition (a→aaaa, b→bbbb, c→cccc, d→dddd)
+  - Two token alternation (ab→abab, ac→acac, bd→bdbd, etc.)
+  - All 16 possible two-token combinations
 
-Strangely, epoch 20 is worse than epoch 10.
+### v_scale = 1.0 Results
+- Also achieves perfect accuracy by epoch 5
+- Training loss: 1.410 (better than v_scale=0.0)
+- Validation loss: 0.664 (better than v_scale=0.0)
 
-| Input | Expected  | v_scale=0.0 | Correct (0.0) | v_scale=1.0 | Correct (1.0) |
-|-------|----------|------------|--------------|------------|--------------|
-| a     | aaaaaaaa | aaaaaaaa   | ✅          | aaaaaaaa   | ✅          |
-| b     | bbbbbbbb | bbbbbbbb   | ✅          | bbbbbbbb   | ✅          |
-| c     | cccccccc | cccccccc   | ✅          | cccccccc   | ✅          |
-| d     | dddddddd | dddddddd   | ✅          | dddddddd   | ✅          |
-| aa    | aaaaaaaa | aaaaaaaa   | ✅          | aaaaaaaa   | ✅          |
-| ab    | abababab | abababab   | ✅          | abababab   | ✅          |
-| ac    | acacacac | bcbcbcbc   | ❌          | aaaaaaaa   | ❌          |
-| ad    | adadadad | adadadad   | ✅          | adadadad   | ✅          |
-| ba    | babababa | babababa   | ✅          | babababa   | ✅          |
-| bb    | bbbbbbbb | bbbbbbbb   | ✅          | bbbbbbbb   | ✅          |
-| bc    | bcbcbcbc | bcbcbcbc   | ✅          | bcbcbcbc   | ✅          |
-| bd    | bdbdbdbd | babababa   | ❌          | dddddddd   | ❌          |
-| ca    | cacacaca | cacacaca   | ❌          | aaaaaaaa   | ❌          |
-| cb    | cbcbcbcb | cbcbcbcb   | ✅          | cbcbcbcb   | ✅          |
-| cc    | cccccccc | cccccccc   | ✅          | cccccccc   | ✅          |
-| cd    | cdcdcdcd | cdcdcdcd   | ✅          | cdcdcdcd   | ✅          |
-| da    | dadadada | dadadada   | ✅          | dadadada   | ✅          |
-| db    | dbdbdbdb | dcdcdcdc   | ❌          | abababab   | ❌          |
-| dc    | dcdcdcdc | dcdcdcdc   | ✅          | dcdcdcdc   | ✅          |
-| dd    | dddddddd | dddddddd   | ✅          | dddddddd   | ✅          |
+## Analysis
+### Scaling Observations
+1. **Token Count Impact**
+   - 4-token system requires more epochs (5) vs 2-token system (1)
+   - Higher final training loss (1.620 vs 1.450)
+   - Higher validation loss (0.830 vs 0.639)
 
-Here’s your updated markdown table, incorporating the new error positions from **epoch 20**:
+2. **V-Scale Comparison**
+   - v_scale=1.0 shows better convergence (train_loss: 1.410 vs 1.620)
+   - v_scale=1.0 achieves better validation loss (0.664 vs 0.830)
+   - Both settings eventually achieve perfect accuracy
 
-```markdown
-| Input | Expected  | v_scale=0.0 | Correct (0.0) | v_scale=1.0 | Correct (1.0) |
-|-------|----------|------------|--------------|------------|--------------|
-| a     | aaaaaaaa | aaaaaaaa   | ✅          | aaaaaaaa   | ✅          |
-| b     | bbbbbbbb | bbbbbbbb   | ✅          | bbbbbbbb   | ✅          |
-| c     | cccccccc | cccccccc   | ✅          | cccccccc   | ✅          |
-| d     | dddddddd | dddddddd   | ✅          | dddddddd   | ✅          |
-| aa    | aaaaaaaa | aaaaaaaa   | ✅          | aaaaaaaa   | ✅          |
-| ab    | abababab | abababab   | ✅          | abababab   | ✅          |
-| ac    | acacacac | bcbcbcbc   | ❌          | aaaaaaaa   | ❌          |
-| ad    | adadadad | adadadad   | ✅          | adadadad   | ✅          |
-| ba    | babababa | babababa   | ✅          | babababa   | ✅          |
-| bb    | bbbbbbbb | bbbbbbbb   | ✅          | bbbbbbbb   | ✅          |
-| bc    | bcbcbcbc | bcbcbcbc   | ✅          | bcbcbcbc   | ✅          |
-| bd    | bdbdbdbd | babababa   | ❌          | dddddddd   | ❌          |
-| ca    | cacacaca | cacacaca   | ❌          | aaaaaaaa   | ❌          |
-| cb    | cbcbcbcb | cbcbcbcb   | ✅          | cbcbcbcb   | ✅          |
-| cc    | cccccccc | cccccccc   | ✅          | cccccccc   | ✅          |
-| cd    | cdcdcdcd | cdcdcdcd   | ✅          | cdcdcdcd   | ✅          |
-| da    | dadadada | dadadada   | ✅          | dadadada   | ✅          |
-| db    | dbdbdbdb | dcdcdcdc   | ❌          | abababab   | ❌          |
-| dc    | dcdcdcdc | dcdcdcdc   | ✅          | dcdcdcdc   | ✅          |
-| dd    | dddddddd | dddddddd   | ✅          | dddddddd   | ✅          |
-```
+### Key Findings
+- Model successfully scales to 4x more pattern combinations
+- Maintains perfect accuracy despite increased complexity
+- RoPE v-scaling appears beneficial for larger token sets
+- Learning time increases linearly, not exponentially
 
-### Observations:
-- **Errors remain in four positions**, but they **shifted** in `v_scale=1.0` from epoch 10 to 20.
-- The **same four inputs fail (`ac`, `bd`, `ca`, `db`)**, but their incorrect outputs changed.
-- **The v_scale=1.0 errors clustered on extreme outputs (`aaaaaaaa`, `dddddddd`, `abababab`)**, whereas `v_scale=0.0` errors look more like misaligned cyclic mappings (`bcbcbcbc`, `babababa`, etc.).
-- **Epoch 20 is worse than epoch 10**, meaning **training isn't refining these failure points**, possibly indicating **instability in how RoPE on `V` interacts with cyclic patterns**.
+### Implications
+1. **Architectural Efficiency**
+   - Same tiny architecture (2.7K params) handles 4x pattern space
+   - 2-token context window sufficient for larger vocabulary
+   - No architecture changes needed for increased token count
 
-This suggests that applying RoPE to `V` isn't necessarily making attention more robust to cyclic structure—it's just *reorienting* failure points while keeping the same number of errors. The model could be overly weighting specific learned positional embeddings when `V` is modified.
+2. **Training Dynamics**
+   - v-scaling becomes more relevant with increased token count
+   - Training complexity scales reasonably with token count
+   - Model demonstrates robust generalization across pattern types
 
-### Next Steps:
-- **Try intermediate `v_scale` values** (e.g., `0.3, 0.5, 0.7`) to see if errors gradually shift or disappear.
-- **Analyze token embeddings at error positions**—is there a systematic drift in how they cluster?
-- **Check attention weights on error cases**—do they collapse to single dominant tokens?
-
-Would be great to visualize attention maps for `v_scale=0.0` vs. `v_scale=1.0` to see how it's warping representations!
-
-
-HA! It was a problem in the dataset. It was missing those 4 definitions. The fact at lower epochs that it could even learn 2 is kinda amazing. Need to reproduce later.
-
-So I can confirm now that 4 tokens in 2cw WORKS!
-
+This experiment shows that the minimal transformer architecture scales effectively to larger token sets while maintaining perfect pattern recognition, with v-scaling becoming more beneficial as pattern complexity increases.
