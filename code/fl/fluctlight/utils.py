@@ -165,7 +165,11 @@ def generate_continuation(
 
 def load_model(checkpoint_path: str) -> nn.Module:
     """
-    Load a model from a checkpoint with proper error handling.
+    Load a model from a checkpoint with strict parameter requirements.
+    
+    This function enforces that all required parameters must be present in
+    the checkpoint configuration. It will not provide defaults and will
+    fail if any parameter is missing.
     
     Args:
         checkpoint_path: Path to the model checkpoint
@@ -175,16 +179,65 @@ def load_model(checkpoint_path: str) -> nn.Module:
         
     Raises:
         FileNotFoundError: If checkpoint doesn't exist
+        KeyError: If any required parameter is missing from checkpoint
         RuntimeError: If checkpoint loading fails
     """
     from .model import FluctlightTransformer
     
     try:
-        model = FluctlightTransformer.load_from_checkpoint(checkpoint_path)
+        # Load checkpoint
+        checkpoint = torch.load(checkpoint_path)
+        
+        # Get config, ensuring it exists
+        if "state_dict" not in checkpoint:
+            raise KeyError("Checkpoint missing state_dict")
+        if "config" not in checkpoint["state_dict"]:
+            raise KeyError("Checkpoint missing configuration")
+            
+        config = checkpoint["state_dict"]["config"]
+        
+        # Required parameters - will raise KeyError if any are missing
+        required_params = [
+            "vocab_size",
+            "d_model",
+            "n_heads",
+            "n_layers",
+            "d_ff",
+            "learning_rate",
+            "weight_decay",
+            "context_window",
+            "v_scale"
+        ]
+        
+        # Verify all required parameters exist
+        missing_params = [param for param in required_params if param not in config]
+        if missing_params:
+            raise KeyError(f"Missing required parameters: {', '.join(missing_params)}")
+        
+        # Create model with exact parameters from checkpoint
+        model = FluctlightTransformer(
+            vocab_size=config["vocab_size"],
+            d_model=config["d_model"],
+            n_heads=config["n_heads"],
+            n_layers=config["n_layers"],
+            d_ff=config["d_ff"],
+            learning_rate=config["learning_rate"],
+            weight_decay=config["weight_decay"],
+            context_window=config["context_window"],
+            v_scale=config["v_scale"]
+        )
+        
+        # Load state dict
+        state_dict = {k: v for k, v in checkpoint["state_dict"].items() if k != "config"}
+        model.load_state_dict(state_dict, strict=True)  # Changed to strict=True
+        
         model.eval()
         return model
+        
     except FileNotFoundError as e:
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}") from e
+    except KeyError as e:
+        raise KeyError(f"Invalid checkpoint format: {str(e)}") from e
     except Exception as e:
         raise RuntimeError(f"Failed to load checkpoint: {e}") from e
 

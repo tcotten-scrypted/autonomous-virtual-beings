@@ -107,6 +107,19 @@ class FluctlightTransformer(pl.LightningModule):
         """
         super().__init__()
 
+        # Store all hyperparameters first
+        self.hparams.update(dict(
+            vocab_size=vocab_size,
+            d_model=d_model,
+            n_heads=n_heads,
+            n_layers=n_layers,
+            d_ff=d_ff,
+            learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            v_scale=v_scale
+        ))
+
+        # Then set instance variables
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.n_heads = n_heads
@@ -115,6 +128,7 @@ class FluctlightTransformer(pl.LightningModule):
         self.head_dim = d_model // n_heads
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
+        self.v_scale = v_scale
         
         # Initialize context window with prediction if not provided
         predicted_context = self.predict_context_window()
@@ -126,8 +140,6 @@ class FluctlightTransformer(pl.LightningModule):
                       f"than predicted optimal size ({predicted_context})")
         else:
             self.context_window = predicted_context
-        
-        self.v_scale = v_scale
         
         # Compute dynamic dropout rate based on model size
         # Small models (pre-Origami expansions) should negligibly drop tokens
@@ -481,18 +493,10 @@ class FluctlightTransformer(pl.LightningModule):
             Dict containing model state and configuration
         """
         state = super().state_dict()
-        # Add configuration parameters
-        state["config"] = {
-            "vocab_size": self.vocab_size,
-            "d_model": self.d_model,
-            "n_heads": self.n_heads,
-            "n_layers": self.n_layers,
-            "d_ff": self.d_ff,
-            "learning_rate": self.learning_rate,
-            "weight_decay": self.weight_decay,
-            "context_window": self.context_window,
-            "v_scale": self.v_scale,
-        }
+        # Add configuration parameters from hparams
+        state["config"] = dict(self.hparams)
+        # Add context_window separately since it might be predicted
+        state["config"]["context_window"] = self.context_window
         return state
 
     @classmethod
@@ -549,5 +553,10 @@ class FluctlightTransformer(pl.LightningModule):
         # If context window was stored, ensure it's used (in case prediction was larger)
         if stored_context is not None:
             model.context_window = max(2, stored_context)  # Maintain minimum of 2
+            
+        # Ensure v_scale is properly set from config
+        if "v_scale" in config:
+            model.v_scale = config["v_scale"]
+            model.hparams.v_scale = config["v_scale"]
         
         return model

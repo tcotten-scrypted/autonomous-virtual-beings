@@ -231,8 +231,8 @@ def generate(
         FileNotFoundError: If checkpoint doesn't exist
         ValueError: If temperature <= 0
     """
-    # Load model
-    model = FluctlightTransformer.load_from_checkpoint(checkpoint_path)
+    # Load model using the same mechanism as test
+    model = load_model(checkpoint_path)
 
     # Generate continuation
     output = generate_continuation(
