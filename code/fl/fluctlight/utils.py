@@ -5,6 +5,7 @@ This module provides core utilities for:
 1. Base64 encoding/decoding of training data
 2. Text generation with temperature sampling
 3. Data processing helpers
+4. Model loading and testing utilities
 
 The utilities are optimized for the minimal context window of 2 tokens,
 but support arbitrary context sizes. Temperature sampling is particularly
@@ -12,6 +13,8 @@ important for controlling pattern generation in the minimal context case.
 """
 
 import base64
+import math
+import csv
 from typing import Tuple, List, Optional, Union, cast
 
 import torch
@@ -159,3 +162,59 @@ def generate_continuation(
         print("--- End of Generation Debugging ---\n")
 
     return generated_str
+
+def load_model(checkpoint_path: str) -> nn.Module:
+    """
+    Load a model from a checkpoint with proper error handling.
+    
+    Args:
+        checkpoint_path: Path to the model checkpoint
+        
+    Returns:
+        nn.Module: Loaded model in eval mode
+        
+    Raises:
+        FileNotFoundError: If checkpoint doesn't exist
+        RuntimeError: If checkpoint loading fails
+    """
+    from .model import FluctlightTransformer
+    
+    try:
+        model = FluctlightTransformer.load_from_checkpoint(checkpoint_path)
+        model.eval()
+        return model
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}") from e
+    except Exception as e:
+        raise RuntimeError(f"Failed to load checkpoint: {e}") from e
+
+def calculate_rmse(expected: str, actual: str) -> float:
+    """
+    Calculate Root Mean Square Error between expected and actual strings.
+    
+    For strings of different lengths, pads the shorter one with NUL bytes.
+    Each character is treated as its ASCII value for the calculation.
+    
+    Args:
+        expected: Expected string
+        actual: Actual generated string
+        
+    Returns:
+        float: RMSE value, or math.inf if strings are empty
+    """
+    if not expected or not actual:
+        return math.inf
+        
+    # Pad shorter string with NUL bytes
+    max_len = max(len(expected), len(actual))
+    expected_padded = expected.ljust(max_len, '\0')
+    actual_padded = actual.ljust(max_len, '\0')
+    
+    # Convert to ASCII values and calculate RMSE
+    expected_vals = [ord(c) for c in expected_padded]
+    actual_vals = [ord(c) for c in actual_padded]
+    
+    squared_diff_sum = sum((e - a) ** 2 for e, a in zip(expected_vals, actual_vals))
+    rmse = math.sqrt(squared_diff_sum / max_len)
+    
+    return rmse

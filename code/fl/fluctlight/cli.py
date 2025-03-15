@@ -4,7 +4,8 @@ Command-line interface for training and using the Fluctlight Transformer.
 This module provides a CLI for:
 1. Training the model on Base64-encoded text data
 2. Generating text continuations using a trained model
-3. Managing checkpoints and logging
+3. Testing model predictions against expected outputs
+4. Managing checkpoints and logging
 
 The interface is optimized for the minimal context window of 2 tokens,
 which is sufficient for learning basic patterns. The training process
@@ -23,21 +24,37 @@ Examples:
             --checkpoint checkpoints/last.ckpt \\
             --input-text "ab" \\
             --temperature 0.2  # Low temp for stable patterns
+            
+    Testing:
+        python -m fluctlight.cli test \\
+            --checkpoint checkpoints/last.ckpt \\
+            --input-file tests/patterns.csv \\
+            --temperature 0.01  # Very low temp for deterministic output
 """
 
 import argparse
 import base64
+import csv
 import os
+import sys
 from pathlib import Path
-from typing import Optional, List, Iterator
+from typing import Optional, List, Iterator, Tuple
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from .model import FluctlightTransformer
-from .dataset import Base64Dataset, create_dataloader
-from .utils import generate_continuation
+# Handle both module and direct script usage
+try:
+    from .model import FluctlightTransformer
+    from .dataset import Base64Dataset, create_dataloader
+    from .utils import generate_continuation, load_model, calculate_rmse
+except ImportError:
+    # Add parent directory to path for direct script usage
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from fluctlight.model import FluctlightTransformer
+    from fluctlight.dataset import Base64Dataset, create_dataloader
+    from fluctlight.utils import generate_continuation, load_model, calculate_rmse
 
 def ascii_chunks(size: int = 32) -> Iterator[bytes]:
     """
@@ -228,13 +245,79 @@ def generate(
     print(f"Input: {input_text}")
     print(f"Generated: {output}")
 
+def test(
+    checkpoint_path: str,
+    input_file: str,
+    temperature: float = 0.01
+) -> None:
+    """
+    Test model predictions against expected outputs from a CSV file.
+    
+    The CSV file should contain two columns:
+    1. Input tokens (e.g., "ab")
+    2. Expected output (e.g., "abababab")
+    
+    The function prints a table with:
+    - ✅/❌ for exact matches
+    - Number of errors
+    - RMSE between expected and actual outputs
+    - Input tokens
+    - Expected output
+    - Actual output
+    
+    Args:
+        checkpoint_path: Path to model checkpoint
+        input_file: Path to CSV file with test cases
+        temperature: Sampling temperature (default: 0.01 for deterministic output)
+        
+    Raises:
+        FileNotFoundError: If checkpoint or input file doesn't exist
+        ValueError: If temperature <= 0 or CSV format is invalid
+    """
+    # Load model once for all test cases
+    model = load_model(checkpoint_path)
+    
+    # Print table header
+    print("match,errors,rmse,input,expected,actual")
+    
+    try:
+        with open(input_file, 'r') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if len(row) != 2:
+                    raise ValueError(f"Invalid CSV format. Expected 2 columns, got {len(row)}")
+                
+                input_str, expected = row
+                
+                # Generate output using the loaded model
+                actual = generate_continuation(
+                    model,
+                    input_str,
+                    max_length=len(expected),  # Match expected length
+                    temperature=temperature
+                )
+                
+                # Calculate metrics
+                is_match = actual == expected
+                error_count = sum(1 for a, e in zip(actual.ljust(len(expected)), expected) if a != e)
+                rmse = calculate_rmse(expected, actual)
+                
+                # Print result row
+                print(f"{('✅' if is_match else '❌')},{error_count},{rmse:.3f},{input_str},{expected},{actual}")
+                
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"Input file not found: {input_file}") from e
+    except csv.Error as e:
+        raise ValueError(f"Invalid CSV format: {e}") from e
+
 def main() -> None:
     """
     Main entry point for the CLI.
     
-    Provides two commands:
+    Provides commands:
     1. train: Train a new model
     2. generate: Generate text with a trained model
+    3. test: Test model predictions against expected outputs
     
     Run with --help for usage information.
     """
@@ -261,6 +344,12 @@ def main() -> None:
     generate_parser.add_argument("--max-length", type=int, default=None, help="Maximum length")
     generate_parser.add_argument("--temperature", type=float, default=0.8, help="Sampling temperature")
 
+    # Test command
+    test_parser = subparsers.add_parser("test", help="Test model predictions")
+    test_parser.add_argument("--checkpoint", required=True, help="Model checkpoint path")
+    test_parser.add_argument("--input-file", required=True, help="CSV file with test cases")
+    test_parser.add_argument("--temperature", type=float, default=0.01, help="Sampling temperature (default: 0.01)")
+
     args = parser.parse_args()
 
     if args.command == "train":
@@ -281,6 +370,12 @@ def main() -> None:
             args.checkpoint,
             args.input_text,
             args.max_length,
+            args.temperature
+        )
+    elif args.command == "test":
+        test(
+            args.checkpoint,
+            args.input_file,
             args.temperature
         )
     else:
