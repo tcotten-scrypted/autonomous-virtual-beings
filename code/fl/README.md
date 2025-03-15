@@ -19,6 +19,8 @@ Fluctlight is a minimalist implementation of the Transformer architecture that i
 
 ### Unproven Areas of Interest
 - Train larger Origami-derived models from Fluctlights
+- Explore adaptive normalization scaling in expanded models
+- Test RoPE interpolation on value vectors for position awareness
 
 ### Key Features
 - PyTorch-based Transformer architecture
@@ -26,18 +28,21 @@ Fluctlight is a minimalist implementation of the Transformer architecture that i
 - Rich visualization for model training and text generation
 - Efficient byte-level tokenization (vocab size: 256)
 - Terminal-based interactive text generation UI
+- Dynamic normalization scaling for model expansion
 
 ## Model Architecture
 
 The Fluctlight model uses the following configuration:
-- Parameters: 2,648
+- Parameters: 2,656 (including final normalization layer)
 - Vocabulary Size: 256 (byte-level encoding)
 - Hidden Dimension: 4
 - Number of Heads: 2
 - Number of Layers: 2
-- Head Dimension: 8
-- Context Window: 16 tokens
-- Embedding: Rotary Positional Embedding (RoPE) across Q, K, and V (yes, I know the latter is unusual)
+- Head Dimension: 2 (per head)
+- Context Window: 2 tokens (minimum viable for pattern learning)
+- Embedding: Rotary Positional Embedding (RoPE) on Q and K
+- Optional: Experimental RoPE on V vectors (disabled by default)
+- Normalization: Adaptive scaling (inactive at d_model=4)
 
 See the architecture diagrams in `docs/` for detailed visualization.
 
@@ -65,12 +70,12 @@ uv pip install -r dev-requirements.txt
 python -m fluctlight.cli train --train-file data/sample-train.txt --val-file data/sample-val.txt --output-dir checkpoints
 ```
 
-3. Generate text:
+3. Generate text (low temperature for stable patterns):
 ```bash
-python -m fluctlight.cli generate --checkpoint checkpoints/last.ckpt --input-text "1+"
+python -m fluctlight.cli generate --checkpoint checkpoints/last.ckpt --input-text "ab" --temperature 0.2
 ```
 
-4. Run the interactive cycling demo (which may collapse to token 0):
+4. Run the interactive cycling demo:
 ```bash
 python examples/test_cycling.py
 ```
@@ -91,6 +96,17 @@ fluctlight/
 - The model uses byte-level tokenization, allowing it to handle any text input without a separate tokenizer
 - RoPE implementation provides better handling of positional information compared to absolute positional embeddings
 - The small model size (4-dimensional embeddings) demonstrates core Transformer concepts while remaining computationally efficient
+- Minimal context window of 2 tokens is sufficient for learning basic patterns like "ababab"
+- Adaptive normalization scaling enables smooth transition to larger models
+- Temperature control is crucial for stable pattern generation (0.1-0.3 recommended)
+
+## Empirical Evidence
+
+- Successfully learns alternating patterns with 2-token context window
+- Stable training with up to 16 active tokens from the 256-token vocabulary
+- Low temperatures (0.1-0.3) produce consistent pattern extrapolation
+- RoPE scaling enables position-aware attention even in minimal context
+- Zero-impact normalization scaling at current size (d_model=4)
 
 ## AI Usage
 

@@ -6,15 +6,30 @@ This module provides a CLI for:
 2. Generating text continuations using a trained model
 3. Managing checkpoints and logging
 
-The interface supports both training new models and using pre-trained models
-for text generation, with configurable parameters for both processes.
+The interface is optimized for the minimal context window of 2 tokens,
+which is sufficient for learning basic patterns. The training process
+includes ASCII cycle data to prevent mode collapse around Token 0.
+
+Examples:
+    Training:
+        python -m fluctlight.cli train \\
+            --train-file data/train.txt \\
+            --val-file data/val.txt \\
+            --output-dir checkpoints \\
+            --batch-size 32
+            
+    Generation:
+        python -m fluctlight.cli generate \\
+            --checkpoint checkpoints/last.ckpt \\
+            --input-text "ab" \\
+            --temperature 0.2  # Low temp for stable patterns
 """
 
 import argparse
 import base64
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Iterator
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -24,10 +39,18 @@ from .model import FluctlightTransformer
 from .dataset import Base64Dataset, create_dataloader
 from .utils import generate_continuation
 
-def ascii_chunks(size=32):
+def ascii_chunks(size: int = 32) -> Iterator[bytes]:
     """
-    Generates overlapping 32-byte chunks of the ASCII character set (0-255).
-    Wraps around at the end to form a cycle.
+    Generate overlapping chunks of the ASCII character set (0-255).
+    
+    Creates chunks that wrap around at the end to form a cycle,
+    ensuring all byte values are represented in training data.
+    
+    Args:
+        size: Size of each chunk (default: 32)
+        
+    Returns:
+        Iterator[bytes]: Overlapping byte chunks
     """
     ascii_bytes = bytes(range(256))  # All byte values from 0 to 255
     chunks = [ascii_bytes[i:i + size] for i in range(0, 256, size)]
@@ -36,14 +59,19 @@ def ascii_chunks(size=32):
     chunks.append(ascii_bytes[:size])
     return chunks
 
-# Many ASCII characters are not directly used in training data, so we need to
-# provide at least some training data for them much like human children learn
-# the order of the ABCs. This hopefully prevents mode collapse around Token 0
-def generate_seed_data():
+def generate_seed_data() -> List[str]:
     """
-    Generates the cyclically mapped Base64 seed data.
-    Each line follows the format:
+    Generate cyclically mapped Base64 seed data.
+    
+    Creates training data that helps prevent mode collapse by ensuring
+    all byte values are represented in the training set. This is
+    particularly important for the minimal context window (2 tokens).
+    
+    Format:
         base64(32-byte chunk) \t base64(next 32-byte chunk) \n
+        
+    Returns:
+        List[str]: Base64-encoded training pairs
     """
     chunks = ascii_chunks()
     data = []
@@ -56,13 +84,21 @@ def generate_seed_data():
     return data
 
 class OverwriteLastCheckpoint(pl.Callback):
-    def __init__(self, output_dir: str):
+    """Callback to save the latest model state after each validation."""
+    
+    def __init__(self, output_dir: str) -> None:
+        """
+        Initialize the callback.
+        
+        Args:
+            output_dir: Directory to save checkpoints
+        """
         super().__init__()
         self.dirpath = output_dir
         os.makedirs(output_dir, exist_ok=True)
         
-    def on_validation_end(self, trainer, pl_module):
-        # Save after each validation
+    def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        """Save checkpoint after validation."""
         checkpoint_path = os.path.join(self.dirpath, 'last.ckpt')
         trainer.save_checkpoint(checkpoint_path)
 
@@ -75,25 +111,33 @@ def train(
     learning_rate: float = 1e-3,
     gradient_clip_val: float = 1.0,
     vocab_size: int = 256
-):
+) -> None:
     """
-    Train the model on Base64-encoded text data.
+    Train the Fluctlight model on Base64-encoded text data.
 
     The training process includes:
-    - Loading training and validation datasets
-    - Setting up TensorBoard logging
-    - Configuring checkpointing
-    - Training the model with specified parameters
+    1. Loading training and validation datasets
+    2. Adding ASCII cycle data to prevent mode collapse
+    3. Setting up TensorBoard logging
+    4. Configuring checkpointing
+    5. Training with specified parameters
+
+    The model uses a minimal context window of 2 tokens by default,
+    which is sufficient for learning basic patterns like "ababab".
 
     Args:
         train_file: Path to training data file
         val_file: Path to validation data file
         output_dir: Directory to save checkpoints
-        batch_size: Training batch size
-        max_epochs: Maximum number of training epochs
-        learning_rate: Initial learning rate
-        gradient_clip_val: Gradient clipping value
-        vocab_size: Size of the vocabulary
+        batch_size: Training batch size (default: 32)
+        max_epochs: Maximum training epochs (default: 100)
+        learning_rate: Initial learning rate (default: 1e-3)
+        gradient_clip_val: Gradient clipping value (default: 1.0)
+        vocab_size: Size of vocabulary (default: 256 for bytes)
+        
+    Raises:
+        FileNotFoundError: If data files don't exist
+        ValueError: If parameters are invalid
     """
     # Create output directory
     output_path = Path(output_dir)
@@ -131,7 +175,6 @@ def train(
         gradient_clip_val=gradient_clip_val
     )
 
-    
     trainer.fit(model, train_loader, val_loader)
 
 def generate(
@@ -139,7 +182,7 @@ def generate(
     input_text: str,
     max_length: Optional[int] = None,
     temperature: float = 0.8
-):
+) -> None:
     """
     Generate text continuation using a trained model.
 
@@ -149,11 +192,21 @@ def generate(
     3. Generates continuation with specified parameters
     4. Prints both input and generated text
 
+    For the minimal context window (2 tokens), temperature control
+    is crucial:
+    - 0.1-0.3: Stable patterns (e.g., "ababab")
+    - 0.4-0.7: Balanced variation
+    - 0.8-1.0: Maximum variation
+
     Args:
         checkpoint_path: Path to model checkpoint
         input_text: Seed text for generation
-        max_length: Maximum length of generated text
-        temperature: Sampling temperature (higher = more random)
+        max_length: Maximum length to generate
+        temperature: Sampling temperature (default: 0.8)
+        
+    Raises:
+        FileNotFoundError: If checkpoint doesn't exist
+        ValueError: If temperature <= 0
     """
     # Load model
     model = FluctlightTransformer.load_from_checkpoint(checkpoint_path)
@@ -169,7 +222,16 @@ def generate(
     print(f"Input: {input_text}")
     print(f"Generated: {output}")
 
-def main():
+def main() -> None:
+    """
+    Main entry point for the CLI.
+    
+    Provides two commands:
+    1. train: Train a new model
+    2. generate: Generate text with a trained model
+    
+    Run with --help for usage information.
+    """
     parser = argparse.ArgumentParser(description="Fluctlight Transformer CLI")
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
@@ -189,7 +251,7 @@ def main():
     generate_parser.add_argument("--checkpoint", required=True, help="Model checkpoint path")
     generate_parser.add_argument("--input-text", required=True, help="Input text")
     generate_parser.add_argument("--max-length", type=int, default=None, help="Maximum length")
-    generate_parser.add_argument("--temperature", type=float, default=1.0, help="Sampling temperature")
+    generate_parser.add_argument("--temperature", type=float, default=0.8, help="Sampling temperature")
 
     args = parser.parse_args()
 

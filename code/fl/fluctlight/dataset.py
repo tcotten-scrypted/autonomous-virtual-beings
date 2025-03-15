@@ -1,10 +1,20 @@
 """
 Dataset handling utilities for the Fluctlight Transformer.
+
+This module provides dataset management for byte-level transformer training:
+1. Base64-encoded data loading and decoding
+2. Efficient sequence collation and padding
+3. Dynamic CPU worker allocation
+4. Device placement optimization
+
+The dataset is designed to work with the minimal context window of 2,
+but supports arbitrary context sizes for experimentation. All sequences
+are automatically padded or truncated to match the model's context window.
 """
 
 import base64
 from pathlib import Path
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Union, Optional, Sequence
 
 import multiprocessing
 import torch
@@ -12,22 +22,33 @@ from torch.utils.data import Dataset, DataLoader
 
 from fluctlight.utils import decode_base64_pair
 
-def get_num_cpu_workers(reserved_workers=1):
+def get_num_cpu_workers(reserved_workers: int = 1) -> int:
     """
-    Returns the number of recommended DataLoader workers based on:
-    `total_cpu_cores - reserved_workers`, ensuring at least one worker.
+    Returns the optimal number of DataLoader workers.
     
-    The `reserved_workers` parameter ensures some CPU resources are left
-    available for system processes.
+    Calculates workers as: total_cpu_cores - reserved_workers,
+    ensuring some CPU resources remain available for system processes
+    while maximizing data loading efficiency.
 
+    Args:
+        reserved_workers: Number of CPU cores to reserve (default: 1)
+        
     Returns:
-        int: Number of usable CPU workers.
+        int: Number of usable CPU workers (minimum 1)
     """
     return max(1, multiprocessing.cpu_count() - reserved_workers)
 
 def get_default_device() -> torch.device:
     """
-    Get the optimal available device (Metal, CUDA, or CPU).
+    Get the optimal available device for tensor operations.
+    
+    Checks devices in order of computational efficiency:
+    1. CUDA (NVIDIA GPU)
+    2. MPS (Apple Silicon)
+    3. CPU (fallback)
+    
+    Returns:
+        torch.device: Best available compute device
     """
     if torch.cuda.is_available():
         return torch.device("cuda")
@@ -36,23 +57,37 @@ def get_default_device() -> torch.device:
     return torch.device("cpu")
 
 class Base64Dataset(Dataset):
-    """Dataset for handling Base64-encoded input-output pairs."""
+    """
+    Dataset for handling Base64-encoded input-output pairs.
+    
+    Designed for the Fluctlight Transformer's byte-level training,
+    this dataset:
+    1. Loads Base64-encoded sequence pairs
+    2. Supports optional training data prepending
+    3. Handles device placement automatically
+    4. Provides efficient sequence collation
+    """
 
     def __init__(
         self,
         file_path: Union[str, Path],
         device: Optional[torch.device] = None,
         prepend: Optional[List[str]] = None
-    ):
+    ) -> None:
         """
         Initialize the dataset.
 
         Args:
-            file_path: Path to the data file containing Base64-encoded pairs
-            device: Device to place tensors on (default: None, auto-detect)
+            file_path: Path to data file with Base64-encoded pairs
+            device: Device to place tensors on (default: auto-detect)
+            prepend: Optional training data to prepend (e.g., ASCII cycles)
+        
+        Raises:
+            FileNotFoundError: If file_path doesn't exist
+            ValueError: If file contains invalid Base64 data
         """
         self.file_path = Path(file_path)
-        self.data: List[str] = []
+        self.data: List[Tuple[torch.Tensor, torch.Tensor]] = []
         self.device = device if device is not None else get_default_device()
         
         # Prepend optional training data, such as the extended ASCII cycle 
@@ -67,25 +102,55 @@ class Base64Dataset(Dataset):
                  
     @staticmethod
     def convert_to_tensor(line: str, device: torch.device) -> torch.Tensor:
+        """
+        Convert a string to a tensor of byte values.
+        
+        Args:
+            line: Input string to convert
+            device: Device to place tensor on
+            
+        Returns:
+            torch.Tensor: Long tensor of byte values
+        """
         return torch.tensor([b for b in line], dtype=torch.long, device=device)
    
-    def create_tensor_pair(self, input, target):
+    def create_tensor_pair(
+        self,
+        input_str: str,
+        target_str: str
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Create input-target tensor pair from strings.
+        
+        Args:
+            input_str: Input sequence string
+            target_str: Target sequence string
+            
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: Input and target tensors
+        """
         return (
-            Base64Dataset.convert_to_tensor(input, self.device),
-            Base64Dataset.convert_to_tensor(target, self.device)
+            Base64Dataset.convert_to_tensor(input_str, self.device),
+            Base64Dataset.convert_to_tensor(target_str, self.device)
         )
 
     def __len__(self) -> int:
+        """Return the number of sequence pairs in the dataset."""
         return len(self.data)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]: 
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Get a single example from the dataset.
-
+        
+        Args:
+            idx: Index of the example to retrieve
+            
         Returns:
-            Tensor of byte values representing the sequence
+            Tuple[torch.Tensor, torch.Tensor]: Input and target tensors
+            
+        Raises:
+            IndexError: If idx is out of range
         """
-
         return self.data[idx]
 
 def create_dataloader(
@@ -98,18 +163,25 @@ def create_dataloader(
     persistent_workers: bool = False,
 ) -> DataLoader:
     """
-    Create a DataLoader for the dataset.
+    Create an optimized DataLoader for sequence training.
+
+    The loader handles:
+    1. Sequence padding to context window size
+    2. Efficient batch collation
+    3. Multi-worker data loading
+    4. Memory pinning for GPU training
 
     Args:
         dataset: The dataset to load
-        batch_size: Batch size
-        shuffle: Whether to shuffle the data
-        num_workers: Number of worker processes,
-        pin_memory: Beneficial for GPUs
-        persistent_workers: Performance improvement in PyTorch 1.7+
+        context_window: Size of model's context window
+        batch_size: Number of sequences per batch
+        shuffle: Whether to randomize sequence order
+        num_workers: Number of worker processes
+        pin_memory: Whether to pin memory (useful for GPU)
+        persistent_workers: Keep workers alive between epochs
 
     Returns:
-        DataLoader instance
+        DataLoader: Configured loader for sequence training
     """
     return DataLoader(
         dataset,
@@ -121,10 +193,24 @@ def create_dataloader(
         persistent_workers=persistent_workers
     )
 
-def collate_sequences(batch: List[Tuple[torch.Tensor, torch.Tensor]], context_window: int) -> Tuple[torch.Tensor, torch.Tensor]:
+def collate_sequences(
+    batch: Sequence[Tuple[torch.Tensor, torch.Tensor]],
+    context_window: int
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Collate function for padding sequences to the same length, respecting max context window.
-    Total sequence length (input + target shift) should not exceed MAX_CONTEXT.
+    Collate and pad sequences to uniform length.
+    
+    Handles sequences for the Fluctlight Transformer by:
+    1. Right-aligning sequences within context window
+    2. Zero-padding shorter sequences
+    3. Truncating longer sequences
+    
+    Args:
+        batch: List of (input, target) tensor pairs
+        context_window: Maximum sequence length
+        
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: Padded input and target batches
     """
     inputs, targets = zip(*batch)
     

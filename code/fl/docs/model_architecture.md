@@ -8,31 +8,87 @@ Below is a complete PyTorch Lightning implementation of a minimal Transformer mo
 
 ### Purpose and Design Philosophy
 
-This project demonstrates a Fluctlight Transformer – a tiny Transformer model with only on the order of 2,648 parameters. The purpose is to create the simplest functional Transformer to illustrate the core principles of a viable transformer with attention capable of simple mimicry tasks. By using extremely small dimensions (embedding size 4, feed-forward hidden size 8, 2 heads, 2 layers), the model is easy to train on a CPU and inspect or even overfit on a small dataset. Starting with such a minimal model (2.6K params) provides a baseline that can be progressively expanded to larger models. This minimal design is great for efficient experimentation: it's small enough to train quickly, and it serves as a starting point for future unfolding (growing the model in size while reusing the learned parameters).
+This project demonstrates a Fluctlight Transformer – a tiny Transformer model with only 2,656 parameters. The purpose is to create the simplest functional Transformer to illustrate the core principles of a viable transformer with attention capable of simple mimicry tasks. By using extremely small dimensions (embedding size 4, feed-forward hidden size 8, 2 heads of dimension 2, 2 layers), the model is easy to train on a CPU and inspect or even overfit on a small dataset. Starting with such a minimal model (2.6K params) provides a baseline that can be progressively expanded to larger models. This minimal design is great for efficient experimentation: it's small enough to train quickly, and it serves as a starting point for future unfolding (growing the model in size while reusing the learned parameters).
 
 Despite its size, the model includes all key components of a Transformer:
-- Token embeddings for a vocabulary of 256 (covering extended ASCII characters).
-- Multi-head self-attention mechanism (2 heads, each 2-dimensional) with Rotary Positional Embeddings (RoPE) to encode token positions.
-- Feed-Forward Network (a two-layer MLP with hidden size 8) at each layer.
-- Residual connections and Layer Normalization applied after each sub-layer (Add & Norm).
-- A final output projection to map the 4-dimensional representations back to 256-dimensional token logits.
+- Token embeddings for a vocabulary of 256 (covering extended ASCII characters)
+- Multi-head self-attention mechanism (2 heads, each 2-dimensional) with Rotary Positional Embeddings (RoPE) to encode token positions
+- Feed-Forward Network (a two-layer MLP with hidden size 8) at each layer
+- Residual connections and Layer Normalization applied after each sub-layer (Add & Norm)
+- A final output projection to map the 4-dimensional representations back to 256-dimensional token logits
 
 The use case for this model is primarily experimental. It can learn very simple patterns or mappings (for example, mapping an input string to an output string in the training data). With a very small capacity, it will typically memorize the training data if trained for long, which is useful for verifying that the model and training process are working. In practice, one would not use such a tiny Transformer for real tasks, but it's a stepping stone toward gradually building larger models by unfolding this minimal model.
 
 ### Model Architecture
 
 Key architecture hyperparameters and components:
-- Vocabulary: 256 tokens, representing extended ASCII. Each character (byte) is a token. This includes standard printable ASCII and control characters.
-- Embedding Dimension: 4. Each token is represented by a 4-dimensional vector. The embedding matrix thus has shape 256×4.
+- Parameters: 2,656 (including final normalization layer)
+- Vocabulary: 256 tokens, representing extended ASCII. Each character (byte) is a token.
+- Embedding Dimension: 4. Each token is represented by a 4-dimensional vector.
 - Transformer Encoder Layers: 2 layers in stack. Each layer has:
-  - Multi-Head Self-Attention (MHSA): 2 heads. The model dimension 4 is split into 2 heads of dimension 2 each. Each head attends to the sequence with learned query, key, value projections (Wq, Wk, Wv each of shape 4×4). Causal masking is used so that tokens only attend to previous tokens (this allows the model to be used for autoregressive generation).
-  - Rotary Positional Embedding (RoPE): Applied to the Q and K vectors in attention. RoPE encodes positions by rotating Q and K in a 2D subspace for each pair of dimensions, which injects position information as a phase change in dot-product attention. This effectively means the attention scores depend on the relative positions of tokens, improving the model's ability to generalize to longer sequences without fixed positional embeddings.
-  - Feed-Forward Network (FFN): A two-layer MLP applied to each token position. It expands the 4-dim representation to 8-dim (ff_in layer 4→8 with ReLU), then back down to 4-dim (ff_out layer 8→4). This gives the network capacity to transform and mix information across dimensions in a non-linear way.
-  - Residual Connections: The output of the attention sub-layer is added back to its input (skip connection), and same for the FFN sub-layer.
-  - Layer Normalization: After each addition (residual), a LayerNorm normalizes the features. This helps stabilize training. (We use a Post-Norm configuration: normalization is applied after each sub-layer's residual addition, as in the original Transformer.)
-- Output Projection: A linear layer (4→256) maps the final 4-dimensional token representations to logits over the 256-token vocabulary. This is analogous to the inverse of the embedding layer, translating the model's learned representation back into actual character predictions. (Weights are not tied in this implementation, but they could be in theory.)
+  - Multi-Head Self-Attention (MHSA): 2 heads of dimension 2 each. Each head attends to the sequence with learned query, key, value projections (Wq, Wk, Wv each of shape 4×4). Causal masking is used so that tokens only attend to previous tokens.
+  - Rotary Positional Embedding (RoPE): Applied to Q and K vectors in attention. RoPE encodes positions by rotating Q and K in a 2D subspace for each pair of dimensions, which injects position information as a phase change in dot-product attention.
+  - Optional RoPE on V: Experimental feature (disabled by default, v_scale=0.0) for enhanced positional awareness.
+  - Feed-Forward Network (FFN): A two-layer MLP applied to each token position. It expands the 4-dim representation to 8-dim (ff_in layer 4→8 with ReLU), then back down to 4-dim (ff_out layer 8→4).
+  - Residual Connections: The output of each sub-layer is added back to its input.
+  - Layer Normalization: Applied after each addition, with adaptive scaling based on model size.
+- Context Window: 2 tokens (minimum viable size for pattern learning)
+- Output Projection: A linear layer (4→256) maps the final 4-dimensional token representations to logits over the vocabulary.
 
-Despite the limited size, the model has all the pieces needed for sequence learning. In total, it has on the order of ~2.6K parameters (embedding tables, linear weights, layer norm parameters, etc.). For example, the token embedding matrix is 256×4 = 1024 parameters, and the output projection is another 1024; the two transformer layers together contribute roughly a few hundred parameters each (Q/K/V/O weights, FFN weights, and biases, plus LayerNorm gains/biases).
+### Adaptive Layer Normalization
+
+The model implements a unique adaptive normalization scaling mechanism:
+
+```python
+def calculate_norm_scale_factor(self) -> float:
+    """Calculate scaling factor for layer normalization based on model size."""
+    return min(1.0, max(0.0, (self.d_model - 4) / 28))
+```
+
+This scaling ensures:
+- At d_model=4 (current): scale = 0.0 (no normalization)
+- At d_model=16: scale ≈ 0.43 (partial normalization)
+- At d_model=32: scale = 1.0 (full normalization)
+- At d_model>32: scale = 1.0 (capped)
+
+The scaling is applied to all three normalization points:
+1. After self-attention
+2. After feed-forward network
+3. Final layer normalization
+
+This design allows the model to smoothly transition from no normalization at its minimal size to full normalization as it grows through Origami expansion.
+
+### RoPE Implementation Details
+
+The model uses a context-aware RoPE implementation that adapts to window size:
+
+```python
+def calculate_adaptive_angle_rates(self, dim_idx):
+    """Adaptive RoPE frequency calculation."""
+    normalized_dim = dim_idx / (self.d_model // 2)
+    
+    if self.context_window < 16:
+        # Tiny contexts (2-16): Steeper hyperbolic curve
+        base = 2.0
+        scale = max(1.0, 16.0 / self.context_window)
+    elif self.context_window < 1024:
+        # Standard contexts: Traditional scaling
+        base = 10000.0
+        scale = 1.0
+    else:
+        # Massive contexts: Logarithmic scaling
+        log_adjustment = math.log(self.context_window / 1024 + 1)
+        base = 10000.0 * log_adjustment
+        scale = 1.0 / math.sqrt(log_adjustment)
+    
+    return 1.0 / (base ** (normalized_dim * scale))
+```
+
+This implementation:
+- Uses steeper curves for tiny contexts (critical for d_model=4)
+- Scales appropriately for standard-size contexts
+- Adapts logarithmically for massive contexts
+- Ensures distinct position encoding even in minimal space
 
 ### Architecture Diagram
 
@@ -42,7 +98,7 @@ Below is a Mermaid diagram illustrating the model architecture and data flow thr
 flowchart TD
     subgraph Input_Sequence["Input Tokens (bytes)"]
     end
-    Input_Sequence --> ContextLimit["Context Window Limit (16 tokens)"]
+    Input_Sequence --> ContextLimit["Context Window Limit (2 tokens)"]
     ContextLimit --> Embedding["Token Embedding (256 -> 4)"]
     Embedding --> Layer1["Transformer Encoder Layer 1"]
     
@@ -50,7 +106,7 @@ flowchart TD
         direction LR
         subgraph MHA1["Multi-Head Attention (2-head, RoPE)"]
             direction TB
-            LN1a["LayerNorm"] --> Q1["Wq"]
+            LN1a["LayerNorm (Adaptive)"] --> Q1["Wq"]
             LN1a --> K1["Wk"]
             LN1a --> V1["Wv"]
             Q1 --> Q1_vec["Q vectors"]
@@ -58,7 +114,7 @@ flowchart TD
             V1 --> V1_vec["V vectors"]
             Q1_vec -. "apply RoPE" .-> Q1_rope["Q (rotated)"]
             K1_vec -. "apply RoPE" .-> K1_rope["K (rotated)"]
-            V1_vec -. "apply RoPE" .-> V1_rope["V (rotated)"]
+            V1_vec -. "optional RoPE" .-> V1_rope["V (rotated?)"]
             Q1_rope --> AttnScores1["Dot-Product & Softmax"]
             K1_rope --> AttnScores1
             AttnScores1 --> AttnWeights["Attention Weights"]
@@ -69,11 +125,11 @@ flowchart TD
         
         OutProj1 --> Dropout1["Dropout"]
         Dropout1 --> AddRes1["Add (residual)"]
-        AddRes1 --> LN2["LayerNorm"]
+        AddRes1 --> LN2["LayerNorm (Adaptive)"]
         LN2 --> FFN1["Feed-Forward (4 -> 8 -> 4 with ReLU)"]
         FFN1 --> Dropout2["Dropout"]
         Dropout2 --> AddRes2["Add (residual)"]
-        AddRes2 --> LN3["LayerNorm"]
+        AddRes2 --> LN3["LayerNorm (Adaptive)"]
     end
     
     Layer1 --> Layer2["Transformer Encoder Layer 2 (same structure)"]
@@ -81,7 +137,59 @@ flowchart TD
     OutputProj --> Logits["Logits (prediction scores)"]
 ```
 
-Diagram Explanation: Each input token (a byte character) is first mapped to a 4-dimensional embedding. In Multi-Head Attention, the model computes Query, Key, and Value vectors (each 4-dim, split across 2 heads) for each position. Rotary Positional Encoding (RoPE) is applied to Q and K vectors, rotating them in a plane by an angle proportional to their position index. The dot-product attention then produces weighted sums of values from previous positions for each token (since causal masking prevents looking ahead). The attention output goes through an output linear Wo and is added back to the input (residual), followed by a LayerNorm. Next, the Feed-Forward Network processes each token's data independently through a ReLU-expanded 8-dim hidden layer and back to 4-dim, followed by another residual add and LayerNorm. After two such layers, the final normalized 4-dim vectors are projected to 256-dimensional logits, one for each possible token, determining the predicted output characters.
+### Progressive Expansion (Future Unfolding of the Model)
+
+One interesting aspect of this minimalist model is that it is the basis for experiments in progressively "unfolding" or expanding weights to a larger Transformer by mirroring/copying its weights. The idea is to use the small model as a building block and increase capacity without starting from scratch. This approach is inspired by function-preserving transformations like Net2Net which introduced methods to expand neural networks (width or depth) while initializing the larger model to behave exactly like the smaller one.
+
+Our goal is to train the minimal model on a simple task, then gradually grow it (e.g., double the embedding to 8, 16, … add more heads and layers) to handle more complex tasks, each time reusing the previous weights as a starting point. This approach treats the small model as a "seed" that can blossom into a larger model, a concept sometimes referred to as model growth or model folding. The minimal model's simplicity and low parameter count (2.6K) make it feasible to experiment with such growth quickly.
+
+Why start so small (2,656 parameters)? Starting with a minimal number of parameters ensures that the model can memorize small datasets easily and that every parameter's role can be inspected. It reduces training time to seconds and allows observing training dynamics on a micro-scale. It also forces us to include only the most essential components of a Transformer. From this base, every time we increase capacity, we understand exactly what new parameters are added. This stepwise expansion helps in demystifying how each part of a Transformer contributes to its performance. In essence, the minimal model is like a bonsai tree – small but fully formed – which can be replanted into a bigger pot to grow into a larger tree given time.
+
+How RoPE helps scaling: Rotary Positional Embedding is particularly handy when scaling up sequence length or model size because it encodes positions implicitly and continuously. Unlike fixed positional embeddings (which might be learned for a specific maximum length), RoPE uses a deterministic formula to rotate Q/K vectors. This means if we increase the sequence length, we don't need new position embeddings – the same formula extrapolates to unseen positions (to an extent). When expanding model dimensions, we can also integrate RoPE into the new dimensions without breaking the existing ones: e.g., if we double the embedding, we can assign the original RoPE frequencies to one half of the dimensions and perhaps initialize the other half with either repeated frequencies or new ones (for capturing finer positional details). The relative positioning property of RoPE means the model's attention focuses on relative distance between tokens, which tends to generalize better when the context window grows.
+
+### Why We Do Not Use `nn.TransformerEncoderLayer`
+
+While `nn.TransformerEncoderLayer` provides a cleaner API, we **intentionally avoid it** due to the following reasons:
+
+1. **Weight Mirroring for Origami Expansion**  
+   - Our future "Origami" expansion scheme requires direct control over weight matrices to enable **mirroring and reflection** across axes.  
+   - `nn.TransformerEncoderLayer` encapsulates weights, making **precise control and structured expansion difficult**.
+
+2. **Explicit Control Over QKV and FFN Weights**  
+   - This model manually defines **Wq, Wk, Wv, Wo, ff_in, and ff_out**, allowing **fine-grained weight manipulation**.  
+   - `nn.TransformerEncoderLayer` abstracts these operations, making **custom weight transformations impractical**.
+
+3. **Integration of Rotary Positional Embeddings (RoPE)**  
+   - RoPE requires **modifying Q and K (and optionally V) before attention computation**.  
+   - `nn.TransformerEncoderLayer` does not natively support RoPE, requiring unnecessary workarounds to inject it.
+
+4. **Adaptive Layer Normalization**
+   - Our implementation uses **dynamic normalization scaling** based on model size.
+   - `nn.TransformerEncoderLayer` would require modification to support this feature.
+
+By keeping `nn.ModuleDict()`, we **preserve full control over attention and feed-forward components**, ensuring smooth compatibility with **Origami-based model expansion** in the future.
+
+### Why We Added Adaptive Normalization
+
+Adaptive normalization is introduced to **improve training stability and prevent overfitting** in **larger models** while ensuring **no harmful effects on small models**.
+
+1. **Small Models (`d_model=4`) Remain Unaffected**  
+   - Normalization scale is computed as:  
+     \[
+     \text{scale} = \min(1.0, \max(0.0, \frac{d_{\text{model}} - 4}{28}))
+     \]
+   - For **tiny models** (e.g., `d_model=4`), this results in **zero normalization**, preserving exact behavior.
+
+2. **Scales Automatically for Future Expansions**  
+   - As **Origami expands the model**, normalization **gradually increases**.
+   - The scale reaches **full strength at `d_model=32`**.
+
+3. **Applied at Three Points**  
+   - After self-attention output
+   - After feed-forward network output
+   - Final layer normalization
+
+This ensures the model's behavior is **preserved exactly at current scale** while **preparing for future expansion**.
 
 ## Fluctlight Code Architecture
 
@@ -193,9 +301,9 @@ One interesting aspect of this minimalist model is that it is the basis for expe
 
 Our goal is to train the minimal model on a simple task, then gradually grow it (e.g., double the embedding to 8, 16, … add more heads and layers) to handle more complex tasks, each time reusing the previous weights as a starting point. This approach treats the small model as a "seed" that can blossom into a larger model, a concept sometimes referred to as model growth or model folding. The minimal model's simplicity and low parameter count (2.6K) make it feasible to experiment with such growth quickly.
 
-Why start so small (2,648 parameters)? Starting with a minimal number of parameters ensures that the model can memorize small datasets easily and that every parameter's role can be inspected. It reduces training time to seconds and allows observing training dynamics on a micro-scale. It also forces us to include only the most essential components of a Transformer. From this base, every time we increase capacity, we understand exactly what new parameters are added. This stepwise expansion helps in demystifying how each part of a Transformer contributes to its performance. In essence, the minimal model is like a bonsai tree – small but fully formed – which can be replanted into a bigger pot to grow into a larger tree given time.
+Why start so small (2,656 parameters)? Starting with a minimal number of parameters ensures that the model can memorize small datasets easily and that every parameter's role can be inspected. It reduces training time to seconds and allows observing training dynamics on a micro-scale. It also forces us to include only the most essential components of a Transformer. From this base, every time we increase capacity, we understand exactly what new parameters are added. This stepwise expansion helps in demystifying how each part of a Transformer contributes to its performance. In essence, the minimal model is like a bonsai tree – small but fully formed – which can be replanted into a bigger pot to grow into a larger tree given time.
 
-How RoPE helps scaling: Rotary Positional Embedding is particularly handy when scaling up sequence length or model size because it encodes positions implicitly and continuously. Unlike fixed positional embeddings (which might be learned for a specific maximum length), RoPE uses a deterministic formula to rotate Q/K vectors. This means if we increase the sequence length, we don't need new position embeddings – the same formula extrapolates to unseen positions (to an extent). When expanding model dimensions, we can also integrate RoPE into the new dimensions without breaking the existing ones: e.g., if we double the embedding, we can assign the original RoPE frequencies to one half of the dimensions and perhaps initialize the other half with either repeated frequencies or new ones (for capturing finer positional details). The relative positioning property of RoPE means the model's attention focuses on relative distance between tokens, which tends to generalize better when the context window grows. In summary, RoPE improves the scalability of the model in terms of sequence length and can be smoothly adopted as we increase model size, without having to re-learn positional encodings from scratch for the new model.
+How RoPE helps scaling: Rotary Positional Embedding is particularly handy when scaling up sequence length or model size because it encodes positions implicitly and continuously. Unlike fixed positional embeddings (which might be learned for a specific maximum length), RoPE uses a deterministic formula to rotate Q/K vectors. This means if we increase the sequence length, we don't need new position embeddings – the same formula extrapolates to unseen positions (to an extent). When expanding model dimensions, we can also integrate RoPE into the new dimensions without breaking the existing ones: e.g., if we double the embedding, we can assign the original RoPE frequencies to one half of the dimensions and perhaps initialize the other half with either repeated frequencies or new ones (for capturing finer positional details). The relative positioning property of RoPE means the model's attention focuses on relative distance between tokens, which tends to generalize better when the context window grows.
 
 ### Why We Do Not Use `nn.TransformerEncoderLayer`
 
@@ -210,46 +318,33 @@ While `nn.TransformerEncoderLayer` provides a cleaner API, we **intentionally av
    - `nn.TransformerEncoderLayer` abstracts these operations, making **custom weight transformations impractical**.
 
 3. **Integration of Rotary Positional Embeddings (RoPE)**  
-   - RoPE requires **modifying Q and K (and optionally V)before attention computation**.  
+   - RoPE requires **modifying Q and K (and optionally V) before attention computation**.  
    - `nn.TransformerEncoderLayer` does not natively support RoPE, requiring unnecessary workarounds to inject it.
+
+4. **Adaptive Layer Normalization**
+   - Our implementation uses **dynamic normalization scaling** based on model size.
+   - `nn.TransformerEncoderLayer` would require modification to support this feature.
 
 By keeping `nn.ModuleDict()`, we **preserve full control over attention and feed-forward components**, ensuring smooth compatibility with **Origami-based model expansion** in the future.
 
-### Why We Added Dropout (Dynamic Scaling)
+### Why We Added Adaptive Normalization
 
-Dropout is introduced to **improve training stability and prevent overfitting** in **larger models** while ensuring **no harmful effects on small models**.
+Adaptive normalization is introduced to **improve training stability and prevent overfitting** in **larger models** while ensuring **no harmful effects on small models**.
 
 1. **Small Models (`d_model=4`) Remain Unaffected**  
-   - Dropout is dynamically computed as:  
+   - Normalization scale is computed as:  
      \[
-     \text{dropout} = \min(0.1, 0.5 \times \frac{d_{\text{model}}}{256})
+     \text{scale} = \min(1.0, \max(0.0, \frac{d_{\text{model}} - 4}{28}))
      \]
-   - For **tiny models** (e.g., `d_model=4`), this results in **near-zero dropout**, preventing information loss.
+   - For **tiny models** (e.g., `d_model=4`), this results in **zero normalization**, preserving exact behavior.
 
 2. **Scales Automatically for Future Expansions**  
-   - As **Origami expands the model**, dropout **gradually increases**, helping **larger networks** avoid overfitting.
-   - The rate **caps at 10% (`0.1`)**, ensuring it never removes too much information.
+   - As **Origami expands the model**, normalization **gradually increases**.
+   - The scale reaches **full strength at `d_model=32`**.
 
-3. **Applied Before Residual Connections**  
-   - Dropout is **only applied before residual connections** in:
-     - **Self-Attention Output**
-     - **Feed-Forward Network Output**
-   - This follows **best practices** for stabilizing Transformer training.
+3. **Applied at Three Points**  
+   - After self-attention output
+   - After feed-forward network output
+   - Final layer normalization
 
-Dropout remains **inactive for the current tiny model** but **scales dynamically for future expansions**, ensuring robustness while preserving information.
-
-### Why We Apply RoPE to Values (V)
-
-Traditionally, **Rotary Positional Embeddings (RoPE) are applied only to Queries (Q) and Keys (K)** because attention scores encode relative positional information. However, we extend RoPE to **Values (V)** for the following reasons:
-
-1. **Increased Expressivity in Small Models**  
-   - With a tiny embedding size (`d_model=4`), the model has **limited capacity** to capture complex positional structures.  
-   - Rotating V ensures that **positional information is not lost in the attention output**, improving representation quality.
-
-2. **Future-Proofing for Larger Models (Origami Expansion)**  
-   - As the model **scales**, deeper layers require **stronger positional coherence** across representations.  
-   - Applying RoPE to V ensures that positional information **propagates fully through residual connections**, benefiting future expansions.
-
-3. **Minimal Computational Cost, High Potential Gain**  
-   - RoPE is a simple **element-wise transformation** with **no additional learned parameters**.  
-   - The computational overhead is negligible, making it a **low-cost enhancement**.
+This ensures the model's behavior is **preserved exactly at current scale** while **preparing for future expansion**.
