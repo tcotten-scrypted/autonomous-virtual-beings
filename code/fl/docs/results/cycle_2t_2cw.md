@@ -5,6 +5,7 @@ The model successfully learned the cyclic transformation task with consistent be
 - Prediction entropy: Ranges from 1.62 (Epoch 0) to 1.13 (Epoch 10)
 - Unique prediction count: Consistently 3
 - Training files: `data/cycle_2t_2cw-*.txt`
+- Test file: `data/cycle_2t_2cw.csv`
 
 ### Model Configuration
 - Vocabulary size: 256
@@ -15,51 +16,65 @@ The model successfully learned the cyclic transformation task with consistent be
 - Context window: 2
 - Label smoothing: 0.1
 
-## Test Results and Epoch Progression
+## Test Results and Epoch Progression for v_scale = 0.0
 
 ### Epoch 0 Results
-| Input | Max Length | Generated | Analysis |
-|-------|------------|-----------|----------|
-| `a`   | 8 | `aaaaaaaa` | Default repetition |
-| `b`   | 8 | `bbbbbbbb` | Default repetition |
-| `aa`  | 8 | `aaaaaaaa` | Same-character repetition |
-| `bb`  | 8 | `bbbbbbbb` | Same-character repetition |
-| `ab`  | 8 | `bbbbbbbb` | No swap learned |
-| `ba`  | 8 | `bbbbbbbb` | No swap learned |
-| `ee`  | 8 | `aaaaaaaa` | Fallback to a-repetition |
+match,errors,rmse,input,expected,actual
+✅,0,0.000,a,a,a
+✅,0,0.000,a,aa,aa
+✅,0,0.000,a,aaaa,aaaa
+✅,0,0.000,a,aaaaaaaa,aaaaaaaa
+✅,0,0.000,b,b,b
+✅,0,0.000,b,bb,bb
+✅,0,0.000,b,bbbb,bbbb
+✅,0,0.000,b,bbbbbbbb,bbbbbbbb
+✅,0,0.000,ab,a,a
+✅,0,0.000,ab,ab,ab
+✅,0,0.000,ab,abab,abab
+✅,0,0.000,ab,abababab,abababab
+✅,0,0.000,ba,b,b
+✅,0,0.000,ba,ba,ba
+✅,0,0.000,ba,baba,baba
+✅,0,0.000,ba,babababa,babababa
 
-### Epoch 2 Results
-| Input | Max Length | Generated | Analysis |
-|-------|------------|-----------|----------|
-| `a`   | 8 | `aaaaaaaa` | Stable single-character repetition |
-| `b`   | 8 | `bbbbbbbb` | Stable single-character repetition |
-| `aa`  | 8 | `aaaaaaaa` | Same-character stability |
-| `bb`  | 8 | `bbbbbbbb` | Same-character stability |
-| `ab`  | 8 | `abababab` | Swap pattern emerging |
-| `ba`  | 8 | `babababa` | Swap pattern emerging |
-| `ee`  | 8 | `bbbbbbbb` | Undefined input stabilizing |
+## Test Results and Epoch Progression for v_scale = 1.0
 
-### Epoch 5 Results
-| Input | Max Length | Generated | Analysis |
-|-------|------------|-----------|----------|
-| `a`   | 8 | `aaaaaaaa` | Consistent single-character repetition |
-| `b`   | 8 | `bbbbbbbb` | Consistent single-character repetition |
-| `aa`  | 8 | `aaaaaaaa` | Same-character consistency |
-| `bb`  | 8 | `bbbbbbbb` | Same-character consistency |
-| `ab`  | 8 | `abababab` | Stable swap pattern |
-| `ba`  | 8 | `babababa` | Stable swap pattern |
-| `ee`  | 8 | `babababa` | Undefined input fallback |
+### Epoch 0 Results
+match,errors,rmse,input,expected,actual
+✅,0,0.000,a,a,a
+✅,0,0.000,a,aa,aa
+✅,0,0.000,a,aaaa,aaaa
+✅,0,0.000,a,aaaaaaaa,aaaaaaaa
+✅,0,0.000,b,b,b
+✅,0,0.000,b,bb,bb
+✅,0,0.000,b,bbbb,bbbb
+✅,0,0.000,b,bbbbbbbb,bbbbbbbb
+❌,1,1.000,ab,a,b
+❌,1,0.707,ab,ab,bb
+❌,2,0.707,ab,abab,bbbb
+❌,4,0.707,ab,abababab,bbbbbbbb
+✅,0,0.000,ba,b,b
+❌,1,0.707,ba,ba,bb
+❌,2,0.707,ba,baba,bbbb
+❌,4,0.707,ba,babababa,bbbbbbbb
 
-### Epoch 10 Results
-| Input | Max Length | Generated | Analysis |
-|-------|------------|-----------|----------|
-| `a`   | 8 | `aaaaaaaa` | Perfect single-character repetition |
-| `b`   | 8 | `bbbbbbbb` | Perfect single-character repetition |
-| `aa`  | 8 | `aaaaaaaa` | Consistent same-character repetition |
-| `bb`  | 8 | `bbbbbbbb` | Consistent same-character repetition |
-| `ab`  | 8 | `abababab` | Perfect swap pattern |
-| `ba`  | 8 | `babababa` | Perfect swap pattern |
-| `ee`  | 8 | `babababa` | Consistent undefined input behavior |
+### Epoch 1 Results
+✅,0,0.000,a,a,a
+✅,0,0.000,a,aa,aa
+✅,0,0.000,a,aaaa,aaaa
+✅,0,0.000,a,aaaaaaaa,aaaaaaaa
+✅,0,0.000,b,b,b
+✅,0,0.000,b,bb,bb
+✅,0,0.000,b,bbbb,bbbb
+✅,0,0.000,b,bbbbbbbb,bbbbbbbb
+✅,0,0.000,ab,a,a
+✅,0,0.000,ab,ab,ab
+✅,0,0.000,ab,abab,abab
+✅,0,0.000,ab,abababab,abababab
+✅,0,0.000,ba,b,b
+✅,0,0.000,ba,ba,ba
+✅,0,0.000,ba,baba,baba
+✅,0,0.000,ba,babababa,babababa
 
 ## Analysis
 The model demonstrates simple learning characteristics:
@@ -68,8 +83,8 @@ The model demonstrates simple learning characteristics:
 3. Ability to learn simple cyclic patterns with minimal computational resources
 
 Key Observations:
-- Cycling pattern emerges by Epoch 2
-- Single-character repetition is immediately stable
+- Full v_scale takes longer with 2 active tokens than no v_scaling
+- Converges to stability for small cyclic patterns quickly
 - Undefined inputs show consistent (though arbitrary) fallback behaviors
 
 Implications:

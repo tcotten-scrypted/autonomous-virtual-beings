@@ -1,0 +1,16 @@
+a,a
+a,aa
+a,aaaa
+a,aaaaaaaa
+b,b
+b,bb
+b,bbbb
+b,bbbbbbbb
+ab,a
+ab,ab
+ab,abab
+ab,abababab
+ba,b
+ba,ba
+ba,baba
+ba,babababa
