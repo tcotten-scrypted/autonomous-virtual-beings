@@ -111,6 +111,7 @@ class FluctlightTransformer(pl.LightningModule):
         self.d_model = d_model
         self.n_heads = n_heads
         self.n_layers = n_layers
+        self.d_ff = d_ff
         self.head_dim = d_model // n_heads
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
@@ -486,6 +487,7 @@ class FluctlightTransformer(pl.LightningModule):
             "d_model": self.d_model,
             "n_heads": self.n_heads,
             "n_layers": self.n_layers,
+            "d_ff": self.d_ff,
             "learning_rate": self.learning_rate,
             "weight_decay": self.weight_decay,
             "context_window": self.context_window,
@@ -532,6 +534,7 @@ class FluctlightTransformer(pl.LightningModule):
             d_model=config.get("d_model", 4),
             n_heads=config.get("n_heads", 2),
             n_layers=config.get("n_layers", 2),
+            d_ff=config.get("d_ff", 8),
             learning_rate=config.get("learning_rate", 1e-3),
             weight_decay=config.get("weight_decay", 1e-5),
             context_window=stored_context,  # Let model predict if not stored

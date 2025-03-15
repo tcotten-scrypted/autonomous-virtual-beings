@@ -248,7 +248,8 @@ def generate(
 def test(
     checkpoint_path: str,
     input_file: str,
-    temperature: float = 0.01
+    temperature: float = 0.01,
+    debugging: bool = False
 ) -> None:
     """
     Test model predictions against expected outputs from a CSV file.
@@ -269,6 +270,7 @@ def test(
         checkpoint_path: Path to model checkpoint
         input_file: Path to CSV file with test cases
         temperature: Sampling temperature (default: 0.01 for deterministic output)
+        debugging: Whether to print detailed model information (default: False)
         
     Raises:
         FileNotFoundError: If checkpoint or input file doesn't exist
@@ -276,6 +278,27 @@ def test(
     """
     # Load model once for all test cases
     model = load_model(checkpoint_path)
+    
+    if debugging:
+        print("\n=== Model Configuration ===")
+        print(f"Architecture:")
+        print(f"  - Embedding Dimension (d_model): {model.d_model}")
+        print(f"  - Number of Heads: {model.n_heads}")
+        print(f"  - Number of Layers: {model.n_layers}")
+        print(f"  - Head Dimension: {model.head_dim}")
+        print(f"  - Feed-forward Dimension: {model.d_ff}")
+        print(f"\nParameters:")
+        print(f"  - Vocabulary Size: {model.vocab_size}")
+        print(f"  - Context Window: {model.context_window}")
+        print(f"  - RoPE V-scale: {model.v_scale}")
+        print(f"  - Dropout Rate: {model.dropout_rate}")
+        print(f"\nGeneration Settings:")
+        print(f"  - Temperature: {temperature}")
+        print(f"  - Device: {model.device}")
+        print("\nTest Configuration:")
+        print(f"  - Input File: {input_file}")
+        print(f"  - Checkpoint: {checkpoint_path}")
+        print("\n=== Test Results ===\n")
     
     # Print table header
     print("match,errors,rmse,input,expected,actual")
@@ -349,6 +372,7 @@ def main() -> None:
     test_parser.add_argument("--checkpoint", required=True, help="Model checkpoint path")
     test_parser.add_argument("--input-file", required=True, help="CSV file with test cases")
     test_parser.add_argument("--temperature", type=float, default=0.01, help="Sampling temperature (default: 0.01)")
+    test_parser.add_argument("--debugging", action="store_true", help="Print detailed model information and generation process")
 
     args = parser.parse_args()
 
@@ -376,7 +400,8 @@ def main() -> None:
         test(
             args.checkpoint,
             args.input_file,
-            args.temperature
+            args.temperature,
+            args.debugging
         )
     else:
         parser.print_help()
