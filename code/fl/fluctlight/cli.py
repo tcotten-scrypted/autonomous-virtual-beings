@@ -56,7 +56,7 @@ except ImportError:
     from fluctlight.dataset import Base64Dataset, create_dataloader
     from fluctlight.utils import generate_continuation, load_model, calculate_rmse
 
-def ascii_chunks(size: int = 32) -> Iterator[bytes]:
+def ascii_chunks(size: int = 2) -> Iterator[bytes]:
     """
     Generate overlapping chunks of the ASCII character set (0-255).
     
@@ -64,7 +64,7 @@ def ascii_chunks(size: int = 32) -> Iterator[bytes]:
     ensuring all byte values are represented in training data.
     
     Args:
-        size: Size of each chunk (default: 32)
+        size: Size of each chunk (default: 2)
         
     Returns:
         Iterator[bytes]: Overlapping byte chunks
@@ -76,7 +76,7 @@ def ascii_chunks(size: int = 32) -> Iterator[bytes]:
     chunks.append(ascii_bytes[:size])
     return chunks
 
-def generate_seed_data() -> List[str]:
+def generate_seed_data(size: int = 2) -> List[str]:
     """
     Generate cyclically mapped Base64 seed data.
     
@@ -90,7 +90,7 @@ def generate_seed_data() -> List[str]:
     Returns:
         List[str]: Base64-encoded training pairs
     """
-    chunks = ascii_chunks()
+    chunks = ascii_chunks(size)
     data = []
     
     for i in range(len(chunks) - 1):
@@ -170,7 +170,7 @@ def train(
     )
 
     # Prepare data
-    train_dataset = Base64Dataset(train_file, prepend=generate_seed_data())
+    train_dataset = Base64Dataset(train_file, prepend=generate_seed_data(model.context_window))
     val_dataset = Base64Dataset(val_file)
 
     train_loader = create_dataloader(train_dataset, model.context_window, batch_size=batch_size)
@@ -183,7 +183,7 @@ def train(
     checkpoint_callback = ModelCheckpoint(
         dirpath=output_dir,
         filename='transformer-{epoch:02d}-{val_loss:.2f}',
-        save_top_k=1,
+        save_top_k=10,
         monitor='val_loss'
     )
 
