@@ -252,7 +252,8 @@ def test(
     checkpoint_path: str,
     input_file: str,
     temperature: float = 0.01,
-    debugging: bool = False
+    debugging: bool = False,
+    verbose: bool = False
 ) -> None:
     """
     Test model predictions against expected outputs from a CSV file.
@@ -261,19 +262,16 @@ def test(
     1. Input tokens (e.g., "ab")
     2. Expected output (e.g., "abababab")
     
-    The function prints a table with:
-    - ✅/❌ for exact matches
-    - Number of errors
-    - RMSE between expected and actual outputs
-    - Input tokens
-    - Expected output
-    - Actual output
+    The function provides:
+    - Summary statistics (total tests, passes, fails, avg RMSE)
+    - Detailed results table (optional with --verbose)
     
     Args:
         checkpoint_path: Path to model checkpoint
         input_file: Path to CSV file with test cases
         temperature: Sampling temperature (default: 0.01 for deterministic output)
         debugging: Whether to print detailed model information (default: False)
+        verbose: Whether to print detailed test results (default: False)
         
     Raises:
         FileNotFoundError: If checkpoint or input file doesn't exist
@@ -303,12 +301,29 @@ def test(
         print(f"  - Checkpoint: {checkpoint_path}")
         print("\n=== Test Results ===\n")
     
-    # Print table header
-    print("match,errors,rmse,input,expected,actual")
+    # Initialize statistics
+    total_tests = 0
+    total_passes = 0
+    total_errors = 0
+    total_rmse = 0.0
+    
+    # Store results for summary
+    results = []
     
     try:
         with open(input_file, 'r') as f:
             reader = csv.reader(f)
+            
+            # First pass to count total tests
+            total_tests = sum(1 for _ in reader)
+            f.seek(0)  # Reset file pointer
+            reader = csv.reader(f)
+            
+            # Print table header if verbose
+            if verbose:
+                print("match,errors,rmse,input,expected,actual")
+            
+            # Process each test case
             for row in reader:
                 if len(row) != 2:
                     raise ValueError(f"Invalid CSV format. Expected 2 columns, got {len(row)}")
@@ -328,8 +343,27 @@ def test(
                 error_count = sum(1 for a, e in zip(actual.ljust(len(expected)), expected) if a != e)
                 rmse = calculate_rmse(expected, actual)
                 
-                # Print result row
-                print(f"{('✅' if is_match else '❌')},{error_count},{rmse:.3f},{input_str},{expected},{actual}")
+                # Update statistics
+                if is_match:
+                    total_passes += 1
+                total_errors += error_count
+                total_rmse += rmse
+                
+                # Store result
+                result = f"{('✅' if is_match else '❌')},{error_count},{rmse:.3f},{input_str},{expected},{actual}"
+                results.append(result)
+                
+                # Print result if verbose
+                if verbose:
+                    print(result)
+            
+            # Print summary statistics
+            print("\n=== Test Summary ===")
+            print(f"Total Tests: {total_tests}")
+            print(f"Passed: {total_passes} ({(total_passes/total_tests)*100:.1f}%)")
+            print(f"Failed: {total_tests - total_passes} ({((total_tests-total_passes)/total_tests)*100:.1f}%)")
+            print(f"Total Errors: {total_errors}")
+            print(f"Average RMSE: {(total_rmse/total_tests):.3f}")
                 
     except FileNotFoundError as e:
         raise FileNotFoundError(f"Input file not found: {input_file}") from e
@@ -344,6 +378,11 @@ def main() -> None:
     1. train: Train a new model
     2. generate: Generate text with a trained model
     3. test: Test model predictions against expected outputs
+    
+    The test command supports:
+    - Summary statistics by default
+    - Detailed results with --verbose
+    - Model debugging info with --debugging
     
     Run with --help for usage information.
     """
@@ -376,7 +415,8 @@ def main() -> None:
     test_parser.add_argument("--checkpoint", required=True, help="Model checkpoint path")
     test_parser.add_argument("--input-file", required=True, help="CSV file with test cases")
     test_parser.add_argument("--temperature", type=float, default=0.01, help="Sampling temperature (default: 0.01)")
-    test_parser.add_argument("--debugging", action="store_true", help="Print detailed model information and generation process")
+    test_parser.add_argument("--debugging", action="store_true", help="Print detailed model information")
+    test_parser.add_argument("--verbose", action="store_true", help="Print detailed test results table")
 
     args = parser.parse_args()
 
@@ -406,7 +446,8 @@ def main() -> None:
             args.checkpoint,
             args.input_file,
             args.temperature,
-            args.debugging
+            args.debugging,
+            args.verbose
         )
     else:
         parser.print_help()
