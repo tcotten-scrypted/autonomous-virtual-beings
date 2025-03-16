@@ -58,15 +58,14 @@ def generate_continuation(
     """
     Generate text continuation with temperature-controlled sampling.
     
-    This function is optimized for the minimal context window (2 tokens),
-    where temperature control is crucial for pattern stability. Lower
-    temperatures (0.1-0.3) tend to produce more stable patterns, while
-    higher temperatures introduce more variation.
+    This function handles both context-window-based and fixed-length generation.
+    For testing, max_length determines the exact output length needed.
+    For interactive use, max_length defaults to context_window - input_length.
 
     Args:
         model: The Fluctlight model to use for generation
         input_str: Seed text for generation
-        max_length: Maximum length to generate (default: context_window)
+        max_length: Maximum length to generate (if None, uses context_window - input_length)
         temperature: Sampling temperature (default: 1.0)
             - 0.1-0.3: Stable patterns, good for testing
             - 0.4-0.7: Balanced variation
@@ -88,14 +87,17 @@ def generate_continuation(
     # Get the model's device
     device = next(model.parameters()).device
     
-    # Determine max length, ensuring it doesn't exceed context window
+    # Get context window size
     context_window = getattr(model, 'context_window', 2)  # Default to 2 if not set
-    max_length = max_length or max(1, context_window - len(input_str))
+    
+    # If max_length not specified, calculate based on context window
+    if max_length is None:
+        max_length = max(1, context_window - len(input_str))
 
     # Convert input string to byte-level tokens
     input_tokens = torch.tensor([ord(c) for c in input_str], dtype=torch.long, device=device)
     
-    # Pad or truncate to full context window
+    # For generation, we always use the last context_window tokens as context
     if input_tokens.size(0) > context_window:
         input_tokens = input_tokens[-context_window:]
     
@@ -115,6 +117,7 @@ def generate_continuation(
         print(f"Input Tokens (decimal): {input_tokens.tolist()[0]}")
         print(f"Input Tokens (chars):   {[chr(t) for t in input_tokens.tolist()[0]]}")
         print(f"Context Window: {context_window}")
+        print(f"Max Length: {max_length}")
         print(f"Temperature: {temperature}")
 
     # Generate tokens autoregressively
@@ -150,7 +153,7 @@ def generate_continuation(
                 print(f"  Selected Token: {next_token.item()} "
                       f"('{chr(next_token.item()) if 32 <= next_token.item() <= 126 else '?'}')")
             
-            # Update input tokens, rolling the context window
+            # Update input tokens, maintaining context window size
             input_tokens = torch.cat([input_tokens[:, 1:], next_token.view(1, 1)], dim=1)
 
     # Convert tokens back to string
