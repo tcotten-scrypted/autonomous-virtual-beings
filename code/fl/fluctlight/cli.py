@@ -126,6 +126,7 @@ def train(
     batch_size: int = 32,
     max_epochs: int = 100,
     learning_rate: float = 1e-3,
+    weight_decay: float = 1e-5,
     gradient_clip_val: float = 1.0,
     vocab_size: int = 256,
     context_window: Optional[int] = None,
@@ -148,6 +149,7 @@ def train(
         batch_size: Training batch size (default: 32)
         max_epochs: Maximum training epochs (default: 100)
         learning_rate: Initial learning rate (default: 1e-3)
+        weight_decay: Weight decay rate (default: 1e-5)
         gradient_clip_val: Gradient clipping value (default: 1.0)
         vocab_size: Size of vocabulary (default: 256 for bytes)
         context_window: Size of context window (default: None, will be predicted)
@@ -165,6 +167,7 @@ def train(
     model = FluctlightTransformer(
         vocab_size=vocab_size,
         learning_rate=learning_rate,
+        weight_decay=weight_decay,
         context_window=context_window,
         v_scale=v_scale
     )
@@ -355,6 +358,7 @@ def main() -> None:
     train_parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     train_parser.add_argument("--max-epochs", type=int, default=100, help="Maximum epochs")
     train_parser.add_argument("--learning-rate", type=float, default=1e-3, help="Learning rate")
+    train_parser.add_argument("--weight-decay", type=float, default=1e-5, help="Weight decay")
     train_parser.add_argument("--gradient-clip-val", type=float, default=1.0, help="Gradient clipping value")
     train_parser.add_argument("--vocab-size", type=int, default=256, help="Vocabulary size")
     train_parser.add_argument("--context-window", type=int, default=None, help="Context window size (default: auto-predict)")
@@ -384,6 +388,7 @@ def main() -> None:
             args.batch_size,
             args.max_epochs,
             args.learning_rate,
+            args.weight_decay,
             args.gradient_clip_val,
             args.vocab_size,
             args.context_window,
