@@ -21,3 +21,7 @@
 !cycle_32t_2cw-train.txt
 !cycle_32t_2cw-val.txt
 !cycle_32t_2cw-test.txt
+!cycle_2t_4cw-train.txt
+!cycle_2t_4cw-val.txt
+!cycle_2t_4cw-test.txt
+

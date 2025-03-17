@@ -26,7 +26,7 @@ Key architecture hyperparameters and components:
 - Vocabulary: 256 tokens, representing extended ASCII. Each character (byte) is a token.
 - Embedding Dimension: 4. Each token is represented by a 4-dimensional vector.
 - Transformer Encoder Layers: 2 layers in stack. Each layer has:
-  - Multi-Head Self-Attention (MHSA): 2 heads of dimension 2 each. Each head attends to the sequence with learned query, key, value projections (Wq, Wk, Wv each of shape 4×4). Causal masking is used so that tokens only attend to previous tokens.
+  - Multi-Head Self-Attention (MHSA): 2 heads of dimension 2 each. Each head attends to the sequence with learned query, key, value projections (Wq, Wk, Wv each of shape 4×4). Position-preserving masking is used to ensure tokens primarily attend to their own positions, preventing unwanted position-based token swapping.
   - Rotary Positional Embedding (RoPE): Applied to Q and K vectors in attention. RoPE encodes positions by rotating Q and K in a 2D subspace for each pair of dimensions, which injects position information as a phase change in dot-product attention.
   - Optional RoPE on V: Experimental feature (disabled by default, v_scale=0.0) for enhanced positional awareness.
   - Feed-Forward Network (FFN): A two-layer MLP applied to each token position. It expands the 4-dim representation to 8-dim (ff_in layer 4→8 with ReLU), then back down to 4-dim (ff_out layer 8→4).
@@ -115,7 +115,7 @@ flowchart TD
             Q1_vec -. "apply RoPE" .-> Q1_rope["Q (rotated)"]
             K1_vec -. "apply RoPE" .-> K1_rope["K (rotated)"]
             V1_vec -. "optional RoPE" .-> V1_rope["V (rotated?)"]
-            Q1_rope --> AttnScores1["Dot-Product & Softmax"]
+            Q1_rope --> AttnScores1["Dot-Product & Position-Preserving Mask & Softmax"]
             K1_rope --> AttnScores1
             AttnScores1 --> AttnWeights["Attention Weights"]
             AttnWeights --> AttnOut1["Weighted Sum"]
@@ -256,7 +256,7 @@ Components for efficient training:
 #### Attention Mechanism
 The attention implementation uses:
 1. RoPE for positional information
-2. Causal masking for autoregressive prediction
+2. Position-preserving masking for autoregressive prediction
 3. Multi-head attention with efficient head dimension splitting
 
 #### Training Process
@@ -348,3 +348,21 @@ Adaptive normalization is introduced to **improve training stability and prevent
    - Final layer normalization
 
 This ensures the model's behavior is **preserved exactly at current scale** while **preparing for future expansion**.
+
+### Attention Masking Strategy
+
+The model uses a position-preserving attention mask that ensures each token primarily attends to its own position. This is implemented as a diagonal mask:
+
+```python
+# Apply position-preserving mask that only allows self-attention
+mask = ~torch.eye(seq_len, device=self.device, dtype=torch.bool).unsqueeze(0).unsqueeze(0)
+attn_scores = attn_scores.masked_fill(mask, float('-inf'))
+```
+
+This masking strategy:
+1. Creates a diagonal mask using `torch.eye()` that only allows self-attention
+2. Inverts the mask with `~` to mask out non-diagonal elements
+3. Expands the mask dimensions to match attention scores shape
+4. Sets masked positions to negative infinity before softmax
+
+This approach prevents the model from learning to swap tokens based on their positions while still allowing it to use positional information from RoPE for understanding context. The position-preserving mask is particularly important for maintaining token identity in the context window while learning position-dependent patterns.

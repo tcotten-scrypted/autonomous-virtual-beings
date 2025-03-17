@@ -43,6 +43,7 @@ from typing import Optional, List, Iterator, Tuple
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
+import torch
 
 # Handle both module and direct script usage
 try:
@@ -81,23 +82,50 @@ def generate_seed_data(size: int = 2) -> List[str]:
     Generate cyclically mapped Base64 seed data.
     
     Creates training data that helps prevent mode collapse by ensuring
-    all byte values are represented in the training set. This is
-    particularly important for the minimal context window (2 tokens).
+    all byte values are represented in the training set. For context_window=4,
+    this generates pattern examples like:
+    - "a" -> "aaaa"  (repeat single)
+    - "aa" -> "aaaa" (extend double)
+    - "ab" -> "abab" (alternate pair)
+    - "aabb" -> "aabb" (group pairs)
     
     Format:
-        base64(32-byte chunk) \t base64(next 32-byte chunk) \n
+        base64(input) \t base64(target) \n
+        
+    Args:
+        size: Context window size (default: 2)
         
     Returns:
         List[str]: Base64-encoded training pairs
     """
-    chunks = ascii_chunks(size)
     data = []
     
-    for i in range(len(chunks) - 1):
-        left = base64.b64encode(chunks[i]).decode('utf-8')
-        right = base64.b64encode(chunks[i + 1]).decode('utf-8')
-        data.append(f"{left}\t{right}\n")
-
+    # Basic patterns for a and b
+    patterns = [
+        # Single character patterns
+        ('a', 'a' * size),
+        ('b', 'b' * size),
+        # Double character patterns
+        ('aa', 'a' * size),
+        ('bb', 'b' * size),
+        # Alternating patterns
+        ('ab', 'ab' * (size // 2)),
+        ('ba', 'ba' * (size // 2)),
+        # Group patterns
+        ('aabb', 'aabb' * (size // 4)) if size >= 4 else None,
+        ('bbaa', 'bbaa' * (size // 4)) if size >= 4 else None
+    ]
+    
+    # Filter out None patterns and encode
+    for pattern in patterns:
+        if pattern is not None:
+            input_str, target_str = pattern
+            input_bytes = input_str.encode('utf-8')
+            target_bytes = target_str.encode('utf-8')
+            left = base64.b64encode(input_bytes).decode('utf-8')
+            right = base64.b64encode(target_bytes).decode('utf-8')
+            data.append(f"{left}\t{right}\n")
+    
     return data
 
 class OverwriteLastCheckpoint(pl.Callback):
@@ -130,7 +158,8 @@ def train(
     gradient_clip_val: float = 1.0,
     vocab_size: int = 256,
     context_window: Optional[int] = None,
-    v_scale: float = 0.0
+    v_scale: float = 0.0,
+    resume_from: Optional[str] = None
 ) -> None:
     """
     Train the Fluctlight model on Base64-encoded text data.
@@ -154,6 +183,7 @@ def train(
         vocab_size: Size of vocabulary (default: 256 for bytes)
         context_window: Size of context window (default: None, will be predicted)
         v_scale: Scale factor for RoPE on value vectors (default: 0.0)
+        resume_from: Path to checkpoint to resume training from (default: None)
         
     Raises:
         FileNotFoundError: If data files don't exist
@@ -163,14 +193,38 @@ def train(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
-    # Create model
-    model = FluctlightTransformer(
-        vocab_size=vocab_size,
-        learning_rate=learning_rate,
-        weight_decay=weight_decay,
-        context_window=context_window,
-        v_scale=v_scale
-    )
+    # Create or load model
+    if resume_from is not None:
+        # Load existing model from checkpoint
+        checkpoint = torch.load(resume_from)
+        config = checkpoint.get("config", {})
+        
+        # Create new model with saved config, allowing parameter overrides
+        model = FluctlightTransformer(
+            vocab_size=vocab_size if vocab_size != 256 else config.get("vocab_size", 256),
+            d_model=config.get("d_model", 4),
+            n_heads=config.get("n_heads", 2),
+            n_layers=config.get("n_layers", 2),
+            d_ff=config.get("d_ff", 8),
+            learning_rate=learning_rate if learning_rate != 1e-3 else config.get("learning_rate", 1e-3),
+            weight_decay=weight_decay if weight_decay != 1e-5 else config.get("weight_decay", 1e-5),
+            context_window=context_window if context_window is not None else config.get("context_window", None),
+            v_scale=v_scale if v_scale != 0.0 else config.get("v_scale", 0.0)
+        )
+        
+        # Load the state dict, excluding config
+        state_dict = {k: v for k, v in checkpoint["state_dict"].items() if k != "config"}
+        model.load_state_dict(state_dict)
+        print(f"Resumed training from checkpoint: {resume_from}")
+    else:
+        # Create new model
+        model = FluctlightTransformer(
+            vocab_size=vocab_size,
+            learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            context_window=context_window,
+            v_scale=v_scale
+        )
 
     # Prepare data
     train_dataset = Base64Dataset(train_file, prepend=generate_seed_data(model.context_window))
@@ -402,6 +456,7 @@ def main() -> None:
     train_parser.add_argument("--vocab-size", type=int, default=256, help="Vocabulary size")
     train_parser.add_argument("--context-window", type=int, default=None, help="Context window size (default: auto-predict)")
     train_parser.add_argument("--v-scale", type=float, default=0.0, help="RoPE scale factor for value vectors (default: 0.0)")
+    train_parser.add_argument("--resume-from", type=str, default=None, help="Path to checkpoint to resume training from")
 
     # Generate command
     generate_parser = subparsers.add_parser("generate", help="Generate text")
@@ -432,7 +487,8 @@ def main() -> None:
             args.gradient_clip_val,
             args.vocab_size,
             args.context_window,
-            args.v_scale
+            args.v_scale,
+            args.resume_from
         )
     elif args.command == "generate":
         generate(
