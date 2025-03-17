@@ -90,10 +90,13 @@ def generate_continuation(
     # Get context window size
     context_window = getattr(model, 'context_window', 2)  # Default to 2 if not set
     
-    # If max_length not specified, calculate based on context window
+    # Handle max_length:
+    # 1. If specified, use it directly (for test/generate commands)
+    # 2. If not specified, use context_window as a guide
     if max_length is None:
-        max_length = max(1, context_window - len(input_str))
-
+        # For interactive use without specified length
+        max_length = context_window
+    
     # Convert input string to byte-level tokens
     input_tokens = torch.tensor([ord(c) for c in input_str], dtype=torch.long, device=device)
     

@@ -201,9 +201,9 @@ def collate_sequences(
     Collate and pad sequences to uniform length.
     
     Handles sequences for the Fluctlight Transformer by:
-    1. Right-aligning sequences within context window
-    2. Zero-padding shorter sequences
-    3. Truncating longer sequences
+    1. Right-aligning sequences for proper positional encoding
+    2. Zero-padding shorter sequences on the left
+    3. Truncating longer sequences from the right
     
     Args:
         batch: List of (input, target) tensor pairs
@@ -221,11 +221,11 @@ def collate_sequences(
     input_padded = torch.zeros((len(inputs), context_window), dtype=torch.long, device=device)
     target_padded = torch.zeros((len(inputs), context_window), dtype=torch.long, device=device)
     
-    # Fill tensors, right-aligned with zero padding
+    # Fill tensors, right-aligned with zero padding on the left
     for i, (inp, tgt) in enumerate(zip(inputs, targets)):
-        # Truncate or use full input based on context window
-        input_seq = inp[-context_window:] if inp.size(0) > context_window else inp
-        target_seq = tgt[-context_window:] if tgt.size(0) > context_window else tgt
+        # Truncate from the right if longer than context window
+        input_seq = inp[:context_window]
+        target_seq = tgt[:context_window]
         
         # Right-align the sequences
         input_padded[i, -input_seq.size(0):] = input_seq
