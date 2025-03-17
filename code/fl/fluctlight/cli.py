@@ -307,7 +307,8 @@ def test(
     input_file: str,
     temperature: float = 0.01,
     debugging: bool = False,
-    verbose: bool = False
+    verbose: bool = False,
+    visualize: bool = False
 ) -> None:
     """
     Test model predictions against expected outputs from a CSV file.
@@ -363,6 +364,7 @@ def test(
     
     # Store results for summary
     results = []
+    results_csv_file = "test_results.csv" if visualize else None
     
     try:
         with open(input_file, 'r') as f:
@@ -407,6 +409,11 @@ def test(
                 result = f"{('✅' if is_match else '❌')},{error_count},{rmse:.3f},{input_str},{expected},{actual}"
                 results.append(result)
                 
+                if visualize:
+                    with open(results_csv_file, 'a') as csvfile:
+                        writer = csv.writer(csvfile)
+                        writer.writerow([input_str, expected, actual, error_count, rmse])
+                
                 # Print result if verbose
                 if verbose:
                     print(result)
@@ -418,6 +425,10 @@ def test(
             print(f"Failed: {total_tests - total_passes} ({((total_tests-total_passes)/total_tests)*100:.1f}%)")
             print(f"Total Errors: {total_errors}")
             print(f"Average RMSE: {(total_rmse/total_tests):.3f}")
+            
+            if visualize:
+                from .visualization import visualize_test_results
+                visualize_test_results(results_csv_file)
                 
     except FileNotFoundError as e:
         raise FileNotFoundError(f"Input file not found: {input_file}") from e
@@ -472,7 +483,8 @@ def main() -> None:
     test_parser.add_argument("--temperature", type=float, default=0.01, help="Sampling temperature (default: 0.01)")
     test_parser.add_argument("--debugging", action="store_true", help="Print detailed model information")
     test_parser.add_argument("--verbose", action="store_true", help="Print detailed test results table")
-
+    test_parser.add_argument("--visualize", action="store_true", help="Generate visualization of test results")
+    
     args = parser.parse_args()
 
     if args.command == "train":
@@ -503,7 +515,8 @@ def main() -> None:
             args.input_file,
             args.temperature,
             args.debugging,
-            args.verbose
+            args.verbose,
+            args.visualize
         )
     else:
         parser.print_help()

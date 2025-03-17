@@ -40,3 +40,7 @@ ENV/
 # Replit specific
 .uv/
 .pytest_cache/
+
+# Temporary files
+tmp/*
+!tmp/.gitkeep
