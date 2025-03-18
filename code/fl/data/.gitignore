@@ -24,4 +24,6 @@
 !cycle_2t_4cw-train.txt
 !cycle_2t_4cw-val.txt
 !cycle_2t_4cw-test.txt
-
+!cycle_4t_4cw-train.txt
+!cycle_4t_4cw-val.txt
+!cycle_4t_4cw-test.txt
